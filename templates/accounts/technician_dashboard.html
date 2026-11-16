@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Technician Dashboard | ToolUp{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+  <div>
+    <h1 class="h3 fw-bold mb-1">Technician Dashboard</h1>
+    <p class="text-muted mb-0">
+      Welcome, {{ user.get_full_name|default:user.username }}. Manage your trade verification and client bookings.
+    </p>
+  </div>
+  <a href="{% url 'accounts:profile' %}" class="btn btn-outline-primary">View My Profile</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-muted">Account Role</h2>
+        <p class="h4 fw-bold text-success mb-1">{{ user.get_role_display }}</p>
+        <p class="small text-muted mb-0">Accept requests, update job status, and submit credentials.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-muted">Verification Requirement</h2>
+        <p class="fw-semibold mb-1">Admin Approval Required</p>
+        <p class="small text-muted mb-0">Submit trade license, barangay clearance, and government ID to appear in the directory.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-muted">Contact Number</h2>
+        <p class="fw-semibold mb-1">{{ user.contact_number|default:"Not set yet" }}</p>
+        <a href="{% url 'accounts:profile_edit' %}" class="small">Update account details</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-header bg-white py-3">
+    <h2 class="h5 mb-0 fw-bold">Incoming Booking Requests & Trade Profile</h2>
+  </div>
+  <div class="card-body">
+    <p class="text-muted mb-0">
+      Your technician profile settings, document verification uploads, and client booking queue will appear here as the technician and booking modules are connected.
+    </p>
+  </div>
+</div>
+{% endblock %}

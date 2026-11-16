@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Client Dashboard | ToolUp{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+  <div>
+    <h1 class="h3 fw-bold mb-1">Client Dashboard</h1>
+    <p class="text-muted mb-0">
+      Welcome, {{ user.get_full_name|default:user.username }}. Manage your Cebu City service requests.
+    </p>
+  </div>
+  <a href="{% url 'accounts:profile' %}" class="btn btn-outline-primary">View My Profile</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-muted">Cebu City Coverage</h2>
+        <p class="display-6 fw-bold mb-1">{{ barangay_count }}</p>
+        <p class="small text-muted mb-0">Barangays supported for verified handyman visits.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-muted">Account Role</h2>
+        <p class="h4 fw-bold text-primary mb-1">{{ user.get_role_display }}</p>
+        <p class="small text-muted mb-0">Search verified technicians, book slots, and review completed jobs.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-muted">Contact Email</h2>
+        <p class="fw-semibold mb-1">{{ user.email }}</p>
+        <a href="{% url 'accounts:profile_edit' %}" class="small">Update contact info</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-header bg-white py-3">
+    <h2 class="h5 mb-0 fw-bold">Your Bookings & Directory Access</h2>
+  </div>
+  <div class="card-body">
+    <p class="text-muted mb-0">
+      The Cebu City verified technician directory, booking schedule selector, and booking tracker will appear here as the service and booking modules are connected.
+    </p>
+  </div>
+</div>
+{% endblock %}

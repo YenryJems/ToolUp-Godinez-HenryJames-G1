@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}My Profile | ToolUp{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-7">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h1 class="h4 mb-0 fw-bold">My Profile</h1>
+        <a href="{% url 'accounts:profile_edit' %}" class="btn btn-primary btn-sm">Edit Profile</a>
+      </div>
+      <div class="card-body p-4">
+        <dl class="row mb-0">
+          <dt class="col-sm-4 text-muted">Username</dt>
+          <dd class="col-sm-8 fw-semibold">{{ profile_user.username }}</dd>
+
+          <dt class="col-sm-4 text-muted">Full Name</dt>
+          <dd class="col-sm-8">{{ profile_user.get_full_name|default:"-" }}</dd>
+
+          <dt class="col-sm-4 text-muted">Email Address</dt>
+          <dd class="col-sm-8">{{ profile_user.email }}</dd>
+
+          <dt class="col-sm-4 text-muted">Contact Number</dt>
+          <dd class="col-sm-8">{{ profile_user.contact_number|default:"Not provided" }}</dd>
+
+          <dt class="col-sm-4 text-muted">Account Role</dt>
+          <dd class="col-sm-8">
+            <span class="badge bg-secondary">{{ profile_user.get_role_display }}</span>
+          </dd>
+
+          <dt class="col-sm-4 text-muted">Date Joined</dt>
+          <dd class="col-sm-8 mb-0">{{ profile_user.date_joined|date:"F j, Y, g:i A" }}</dd>
+        </dl>
+      </div>
+      <div class="card-footer bg-white py-3">
+        <a href="{% url 'accounts:dashboard' %}" class="btn btn-outline-secondary btn-sm">
+          Back to Dashboard
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

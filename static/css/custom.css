@@ -1,0 +1,8 @@
+/* ToolUp custom stylesheet complementing Bootstrap 5 */
+body {
+  background-color: #f8f9fa;
+}
+
+.toolup-brand {
+  letter-spacing: 0.02em;
+}

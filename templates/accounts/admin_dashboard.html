@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Console | ToolUp{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+  <div>
+    <h1 class="h3 fw-bold mb-1">Admin Dashboard</h1>
+    <p class="text-muted mb-0">
+      Welcome, {{ user.get_full_name|default:user.username }}. Monitor platform users and manage account access.
+    </p>
+  </div>
+  <a href="{% url 'accounts:profile' %}" class="btn btn-outline-primary">View My Profile</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-muted">Total Users</h2>
+        <p class="display-6 fw-bold mb-0">{{ total_users }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-muted">Clients</h2>
+        <p class="display-6 fw-bold text-primary mb-0">{{ client_count }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-muted">Technicians</h2>
+        <p class="display-6 fw-bold text-success mb-0">{{ technician_count }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-muted">Active Accounts</h2>
+        <p class="display-6 fw-bold text-dark mb-0">{{ active_users_count }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-header bg-white py-3">
+    <h2 class="h5 mb-0 fw-bold">User Access Management</h2>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Username</th>
+          <th>Full Name</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th class="text-end">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for account in users_list %}
+          <tr>
+            <td class="fw-semibold">{{ account.username }}</td>
+            <td>{{ account.get_full_name|default:"-" }}</td>
+            <td>{{ account.email }}</td>
+            <td><span class="badge bg-secondary">{{ account.get_role_display }}</span></td>
+            <td>
+              {% if account.is_active %}
+                <span class="badge bg-success">Active</span>
+              {% else %}
+                <span class="badge bg-danger">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              {% if account.pk != user.pk %}
+                <form
+                  method="post"
+                  action="{% url 'accounts:admin_toggle_user' account.pk %}"
+                  class="d-inline"
+                >
+                  {% csrf_token %}
+                  {% if account.is_active %}
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Deactivate</button>
+                  {% else %}
+                    <button type="submit" class="btn btn-outline-success btn-sm">Activate</button>
+                  {% endif %}
+                </form>
+              {% else %}
+                <span class="text-muted small">Current Admin</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-4">No users found.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

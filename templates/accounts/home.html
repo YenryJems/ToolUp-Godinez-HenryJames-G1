@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}ToolUp | Trusted Cebu City Handymen{% endblock %}
+
+{% block content %}
+<div class="row align-items-center py-4 g-4">
+  <div class="col-lg-7">
+    <span class="badge bg-warning text-dark mb-2">Cebu City Local Service Platform</span>
+    <h1 class="display-5 fw-bold mb-3">Find Verified Local Handymen Across Cebu City</h1>
+    <p class="lead text-muted mb-4">
+      ToolUp connects Cebu City homeowners with admin-verified plumbing, electrical, and IT
+      repair technicians across all 80 barangays.
+    </p>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{% url 'accounts:register' %}" class="btn btn-primary btn-lg">Create an Account</a>
+      <a href="{% url 'accounts:login' %}" class="btn btn-outline-dark btn-lg">Sign In</a>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <h2 class="h5 fw-bold mb-3">Platform Roles</h2>
+        <ul class="list-group list-group-flush">
+          <li class="list-group-item px-0">
+            <strong>Clients (Homeowners):</strong> Search verified tradesmen by barangay and schedule visits.
+          </li>
+          <li class="list-group-item px-0">
+            <strong>Technicians (Handymen):</strong> Submit trade credentials, manage bookings, and build trust.
+          </li>
+          <li class="list-group-item px-0">
+            <strong>Admins:</strong> Review verification documents and keep the directory safe.
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
