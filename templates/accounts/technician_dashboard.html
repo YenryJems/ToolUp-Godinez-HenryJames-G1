@@ -181,22 +181,26 @@
                   <form method="post" action="{% url 'booking_detail' booking.id %}" class="d-inline">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="accept">
+                    <input type="hidden" name="next" value="dashboard">
                     <button type="submit" class="btn btn-success btn-sm">Accept</button>
                   </form>
                   <form method="post" action="{% url 'booking_detail' booking.id %}" class="d-inline">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="decline">
+                    <input type="hidden" name="next" value="dashboard">
                     <button type="submit" class="btn btn-outline-danger btn-sm">Decline</button>
                   </form>
                 {% elif booking.status == 'ACCEPTED' %}
                   <form method="post" action="{% url 'booking_detail' booking.id %}" class="d-inline">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="complete">
+                    <input type="hidden" name="next" value="dashboard">
                     <button type="submit" class="btn btn-primary btn-sm">Mark Completed</button>
                   </form>
                   <form method="post" action="{% url 'booking_detail' booking.id %}" class="d-inline">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="cancel">
+                    <input type="hidden" name="next" value="dashboard">
                     <button type="submit" class="btn btn-outline-danger btn-sm">Cancel</button>
                   </form>
                 {% else %}

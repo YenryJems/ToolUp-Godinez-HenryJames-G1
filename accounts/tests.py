@@ -324,9 +324,16 @@ class UserProfileTests(TestCase):
 
 
 class ToolUpUIRoutesTests(TestCase):
-    """Verify ToolUp directory, profile, booking, verification, and review UI routes and permissions."""
+    """Verify database-backed directory, booking lifecycle, double-booking guard, verification, and reviews."""
 
     def setUp(self) -> None:
+        from datetime import timedelta
+        from decimal import Decimal
+        from django.utils import timezone
+        from bookings.models import Booking
+        from services.models import ServiceCategory
+        from technicians.models import TechnicianProfile, VerificationDocument
+
         self.password = "StrongPass2026!"
         self.client_user = CustomUser.objects.create_user(
             username="ui_client",
@@ -336,12 +343,28 @@ class ToolUpUIRoutesTests(TestCase):
             last_name="Cebu",
             role=CustomUser.Role.CLIENT,
         )
+        self.other_client = CustomUser.objects.create_user(
+            username="other_client",
+            email="other_client@example.com",
+            password=self.password,
+            first_name="Marco",
+            last_name="Homeowner",
+            role=CustomUser.Role.CLIENT,
+        )
         self.tech_user = CustomUser.objects.create_user(
             username="ui_tech",
             email="ui_tech@example.com",
             password=self.password,
             first_name="Mateo",
-            last_name="Handyman",
+            last_name="Villanueva",
+            role=CustomUser.Role.TECHNICIAN,
+        )
+        self.unverified_tech_user = CustomUser.objects.create_user(
+            username="unverified_tech",
+            email="unverified_tech@example.com",
+            password=self.password,
+            first_name="Clarisse",
+            last_name="Mendoza",
             role=CustomUser.Role.TECHNICIAN,
         )
         self.admin_user = CustomUser.objects.create_user(
@@ -353,7 +376,66 @@ class ToolUpUIRoutesTests(TestCase):
             role=CustomUser.Role.ADMIN,
         )
 
-    def test_home_and_directory_filters_render_cleanly(self) -> None:
+        self.plumbing = ServiceCategory.objects.create(
+            name="Plumbing",
+            slug="plumbing",
+            icon="bi-droplet-fill",
+            description="Pipe leaks and clogged drains.",
+        )
+        self.it_cat = ServiceCategory.objects.create(
+            name="IT Troubleshooting",
+            slug="it-troubleshooting",
+            icon="bi-pc-display",
+            description="Wi-Fi and router troubleshooting.",
+        )
+
+        self.tech_profile = TechnicianProfile.objects.create(
+            user=self.tech_user,
+            category=self.plumbing,
+            barangay="Lahug",
+            bio="Handles burst pipe leaks and clogged kitchen drains.",
+            hourly_rate=Decimal("450.00"),
+            is_accepting_bookings=True,
+            is_verified=True,
+        )
+        self.unverified_profile = TechnicianProfile.objects.create(
+            user=self.unverified_tech_user,
+            category=self.it_cat,
+            barangay="Guadalupe",
+            bio="Home Wi-Fi setup specialist.",
+            hourly_rate=Decimal("480.00"),
+            is_accepting_bookings=True,
+            is_verified=False,
+        )
+        self.pending_doc = VerificationDocument.objects.create(
+            technician=self.unverified_profile,
+            document_type=VerificationDocument.DocumentType.TRADE_LICENSE,
+            file_path="verification_docs/test_license.pdf",
+            status=VerificationDocument.Status.PENDING,
+        )
+
+        today = timezone.localdate()
+        self.future_date = today + timedelta(days=2)
+        self.pending_booking = Booking.objects.create(
+            client=self.client_user,
+            technician=self.tech_profile,
+            service_date=self.future_date,
+            time_slot="08:00-10:00",
+            service_address="14 Salinas Drive, Brgy. Lahug, Cebu City",
+            issue_description="Leaking kitchen faucet.",
+            status=Booking.Status.PENDING,
+        )
+        self.completed_booking = Booking.objects.create(
+            client=self.client_user,
+            technician=self.tech_profile,
+            service_date=today - timedelta(days=1),
+            time_slot="13:00-15:00",
+            service_address="14 Salinas Drive, Brgy. Lahug, Cebu City",
+            issue_description="Bathroom drain repair.",
+            status=Booking.Status.COMPLETED,
+        )
+
+    def test_home_and_directory_filters_only_verified_technicians(self) -> None:
         home_resp = self.client.get(reverse("home"))
         self.assertEqual(home_resp.status_code, 200)
         self.assertContains(home_resp, "Quick Technician Search")
@@ -361,6 +443,7 @@ class ToolUpUIRoutesTests(TestCase):
         dir_resp = self.client.get(reverse("directory"))
         self.assertEqual(dir_resp.status_code, 200)
         self.assertContains(dir_resp, "Mateo Villanueva")
+        self.assertNotContains(dir_resp, "Clarisse Mendoza")
 
         filtered_resp = self.client.get(
             reverse("directory"),
@@ -368,38 +451,54 @@ class ToolUpUIRoutesTests(TestCase):
         )
         self.assertEqual(filtered_resp.status_code, 200)
         self.assertContains(filtered_resp, "Mateo Villanueva")
-        self.assertNotContains(filtered_resp, "Clarisse Mendoza")
 
         empty_resp = self.client.get(reverse("directory"), {"q": "nonexistent_xyz_issue"})
         self.assertEqual(empty_resp.status_code, 200)
         self.assertContains(empty_resp, "No Verified Technicians Match Your Filters")
 
-    def test_technician_public_profile_renders_and_handles_missing(self) -> None:
-        resp = self.client.get(reverse("technician_detail", args=[1]))
+    def test_technician_public_profile_renders_and_hides_unverified(self) -> None:
+        resp = self.client.get(reverse("technician_detail", args=[self.tech_profile.pk]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Mateo Villanueva")
         self.assertContains(resp, "08:00 AM - 10:00 AM")
 
-        missing_resp = self.client.get(reverse("technician_detail", args=[9999]))
-        self.assertEqual(missing_resp.status_code, 404)
+        unverified_resp = self.client.get(
+            reverse("technician_detail", args=[self.unverified_profile.pk])
+        )
+        self.assertEqual(unverified_resp.status_code, 404)
 
-    def test_technician_ui_routes_enforce_role_access(self) -> None:
-        tech_urls = [
-            reverse("technician_profile_edit"),
-            reverse("technician_verification"),
-        ]
-        for url in tech_urls:
-            self.assertEqual(self.client.get(url).status_code, 302)
+    def test_technician_ui_routes_enforce_role_and_save_service_options(self) -> None:
+        edit_url = reverse("technician_profile_edit")
+        verify_url = reverse("technician_verification")
 
+        self.assertEqual(self.client.get(edit_url).status_code, 302)
         self.client.force_login(self.client_user)
-        for url in tech_urls:
-            self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.get(edit_url).status_code, 403)
+        self.assertEqual(self.client.get(verify_url).status_code, 403)
 
         self.client.force_login(self.tech_user)
-        for url in tech_urls:
-            self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(self.client.get(edit_url).status_code, 200)
+        self.assertEqual(self.client.get(verify_url).status_code, 200)
 
-    def test_admin_verification_queue_enforces_role_and_rejection_reason(self) -> None:
+        save_resp = self.client.post(
+            edit_url,
+            {
+                "category": "plumbing",
+                "barangay": "Mabolo",
+                "hourly_rate": "550.00",
+                "bio": "Updated plumbing bio for Mabolo.",
+                "is_accepting_bookings": "on",
+            },
+            follow=True,
+        )
+        self.assertRedirects(save_resp, edit_url)
+        self.tech_profile.refresh_from_db()
+        self.assertEqual(self.tech_profile.barangay, "Mabolo")
+        self.assertEqual(str(self.tech_profile.hourly_rate), "550.00")
+
+    def test_admin_verification_queue_approves_and_requires_rejection_reason(self) -> None:
+        from technicians.models import VerificationDocument
+
         queue_url = reverse("admin_verification_queue")
         self.assertEqual(self.client.get(queue_url).status_code, 302)
 
@@ -413,29 +512,113 @@ class ToolUpUIRoutesTests(TestCase):
 
         reject_missing = self.client.post(
             queue_url,
-            {"doc_id": "201", "action": "reject_doc", "rejection_reason": ""},
+            {"doc_id": str(self.pending_doc.pk), "action": "reject_doc", "rejection_reason": ""},
             follow=True,
         )
         self.assertContains(reject_missing, "rejection reason is required")
 
-    def test_booking_and_review_routes_enforce_role_and_transitions(self) -> None:
-        book_url = reverse("booking_create", args=[1])
-        review_url = reverse("review_create", args=[103])
-        detail_url = reverse("booking_detail", args=[101])
+        self.client.post(
+            queue_url,
+            {"doc_id": str(self.pending_doc.pk), "action": "approve_doc"},
+        )
+        self.pending_doc.refresh_from_db()
+        self.assertEqual(self.pending_doc.status, VerificationDocument.Status.APPROVED)
 
+    def test_end_to_end_booking_lifecycle_and_double_booking_guard(self) -> None:
+        from datetime import timedelta
+        from django.utils import timezone
+        from bookings.models import Booking
+        from reviews.models import Review
+
+        book_url = reverse("booking_create", args=[self.tech_profile.pk])
+        slot_date = timezone.localdate() + timedelta(days=5)
+
+        # Technician cannot open client booking creation
         self.client.force_login(self.tech_user)
         self.assertEqual(self.client.get(book_url).status_code, 403)
-        self.assertEqual(self.client.get(review_url).status_code, 403)
-        self.assertEqual(self.client.get(detail_url).status_code, 200)
 
+        # Client creates a new booking in DB
         self.client.force_login(self.client_user)
-        self.assertEqual(self.client.get(book_url).status_code, 200)
-        self.assertEqual(self.client.get(review_url).status_code, 200)
-        self.assertEqual(self.client.get(detail_url).status_code, 200)
-        self.assertEqual(
-            self.client.post(detail_url, {"action": "accept"}).status_code,
-            403,
+        create_resp = self.client.post(
+            book_url,
+            {
+                "service_date": slot_date.isoformat(),
+                "time_slot": "10:00-12:00",
+                "barangay": "Lahug",
+                "service_address": "99 Gorordo Ave",
+                "issue_description": "Broken kitchen valve.",
+            },
+            follow=True,
         )
+        created_booking = Booking.objects.get(
+            technician=self.tech_profile,
+            service_date=slot_date,
+            time_slot="10:00-12:00",
+        )
+        self.assertEqual(created_booking.status, Booking.Status.PENDING)
+        self.assertRedirects(create_resp, reverse("booking_detail", args=[created_booking.pk]))
+
+        # Double-booking the same slot is rejected by backend and database constraint
+        dup_resp = self.client.post(
+            book_url,
+            {
+                "service_date": slot_date.isoformat(),
+                "time_slot": "10:00-12:00",
+                "barangay": "Lahug",
+                "service_address": "100 Gorordo Ave",
+                "issue_description": "Another leak.",
+            },
+        )
+        self.assertEqual(dup_resp.status_code, 200)
+        self.assertEqual(
+            Booking.objects.filter(
+                technician=self.tech_profile,
+                service_date=slot_date,
+                time_slot="10:00-12:00",
+            ).count(),
+            1,
+        )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Booking.objects.create(
+                client=self.other_client,
+                technician=self.tech_profile,
+                service_date=slot_date,
+                time_slot="10:00-12:00",
+                service_address="Lahug",
+                issue_description="Direct DB double-book attempt",
+                status=Booking.Status.PENDING,
+            )
+
+        # Unrelated client cannot view or mutate the booking (403)
+        detail_url = reverse("booking_detail", args=[created_booking.pk])
+        self.client.force_login(self.other_client)
+        self.assertEqual(self.client.get(detail_url).status_code, 403)
+
+        # Booking owner client cannot accept their own booking (403)
+        self.client.force_login(self.client_user)
+        self.assertEqual(self.client.post(detail_url, {"action": "accept"}).status_code, 403)
+
+        # Assigned technician accepts and completes the booking
+        self.client.force_login(self.tech_user)
+        self.client.post(detail_url, {"action": "accept"})
+        created_booking.refresh_from_db()
+        self.assertEqual(created_booking.status, Booking.Status.ACCEPTED)
+
+        self.client.post(detail_url, {"action": "complete"})
+        created_booking.refresh_from_db()
+        self.assertEqual(created_booking.status, Booking.Status.COMPLETED)
+
+        # Client submits a 5-star review on the completed booking
+        self.client.force_login(self.client_user)
+        review_url = reverse("review_create", args=[created_booking.pk])
+        rev_resp = self.client.post(
+            review_url,
+            {"rating": "5", "comment": "Prompt and fixed the valve neatly."},
+            follow=True,
+        )
+        self.assertRedirects(rev_resp, reverse("technician_detail", args=[self.tech_profile.pk]))
+        self.assertEqual(Review.objects.filter(booking=created_booking, rating=5).count(), 1)
+        self.assertContains(rev_resp, "Prompt and fixed the valve neatly.")
 
 
 class DatabaseConfigurationTests(TestCase):
@@ -487,4 +670,79 @@ class DatabaseConfigurationTests(TestCase):
         self.assertEqual(cfg["PORT"], "5432")
         self.assertFalse(cfg["DISABLE_SERVER_SIDE_CURSORS"])
         self.assertEqual(cfg["OPTIONS"]["sslmode"], "require")
+
+    def test_falls_back_to_sqlite_when_password_is_placeholder(self) -> None:
+        from pathlib import Path
+        from toolup.settings import build_database_config
+
+        cfg = build_database_config(
+            {
+                "DB_HOST": "aws-0-ap-southeast-1.pooler.supabase.com",
+                "DB_NAME": "postgres",
+                "DB_PASSWORD": "replace-with-supabase-db-password",
+            },
+            Path("/tmp/project"),
+        )
+        self.assertEqual(cfg["ENGINE"], "django.db.backends.sqlite3")
+
+    def test_uses_tmp_sqlite_on_vercel_when_postgres_unset(self) -> None:
+        from pathlib import Path
+        from toolup.settings import build_database_config
+
+        cfg = build_database_config({"VERCEL": "1"}, Path("/var/task"))
+        self.assertEqual(cfg["ENGINE"], "django.db.backends.sqlite3")
+        self.assertEqual(cfg["NAME"], Path("/tmp/db.sqlite3"))
+
+    def test_vercel_wsgi_and_static_and_host_settings(self) -> None:
+        from django.conf import settings
+        from toolup import wsgi
+
+        self.assertTrue(hasattr(wsgi, "app"))
+        self.assertIs(wsgi.app, wsgi.application)
+        self.assertIn(".vercel.app", settings.ALLOWED_HOSTS)
+        self.assertIn("https://*.vercel.app", settings.CSRF_TRUSTED_ORIGINS)
+
+        resp = self.client.get("/static/css/custom.css")
+        try:
+            self.assertEqual(resp.status_code, 200)
+        finally:
+            resp.close()
+
+
+class SeedTestAccountsCommandTests(TestCase):
+    """Verify seed_test_accounts seeds accounts, categories, profiles, bookings, and reviews idempotently."""
+
+    def test_seed_test_accounts_creates_and_updates_three_roles(self) -> None:
+        from io import StringIO
+        from django.core.management import call_command
+        from accounts.management.commands.seed_test_accounts import DEMO_PASSWORD
+        from bookings.models import Booking
+        from reviews.models import Review
+        from services.models import ServiceCategory
+        from technicians.models import TechnicianProfile
+
+        out = StringIO()
+        call_command("seed_test_accounts", stdout=out)
+        user_count_first = CustomUser.objects.count()
+        booking_count_first = Booking.objects.count()
+
+        call_command("seed_test_accounts", stdout=out)
+        self.assertEqual(CustomUser.objects.count(), user_count_first)
+        self.assertEqual(Booking.objects.count(), booking_count_first)
+        self.assertEqual(ServiceCategory.objects.count(), 3)
+        self.assertGreaterEqual(TechnicianProfile.objects.filter(is_verified=True).count(), 6)
+        self.assertEqual(Booking.objects.count(), 4)
+        self.assertEqual(Review.objects.count(), 1)
+
+        admin_u = CustomUser.objects.get(username="admin_demo")
+        tech_u = CustomUser.objects.get(username="tech_demo")
+        client_u = CustomUser.objects.get(username="client_demo")
+
+        self.assertTrue(admin_u.is_admin_role)
+        self.assertTrue(admin_u.is_superuser)
+        self.assertTrue(tech_u.is_technician)
+        self.assertTrue(client_u.is_client)
+        self.assertTrue(admin_u.check_password(DEMO_PASSWORD))
+        self.assertTrue(tech_u.check_password(DEMO_PASSWORD))
+        self.assertTrue(client_u.check_password(DEMO_PASSWORD))
 

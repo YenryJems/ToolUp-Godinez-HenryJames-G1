@@ -1,0 +1,1 @@
+"""Technicians and verification application."""

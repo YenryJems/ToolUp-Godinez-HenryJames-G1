@@ -37,6 +37,7 @@
                 value="{{ default_date }}"
                 min="{{ min_date }}"
                 class="form-control"
+                onchange="if (this.value) { window.location.search = '?date=' + encodeURIComponent(this.value); }"
                 required
               >
               <div class="form-text">Past dates are not allowed.</div>

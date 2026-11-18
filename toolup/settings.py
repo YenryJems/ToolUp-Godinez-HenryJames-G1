@@ -6,6 +6,7 @@ Configured for ToolUp using environment variables (.env) with Supabase PostgreSQ
 """
 
 import os
+import sys
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -51,9 +52,24 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.environ.get("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+    for host in os.environ.get("ALLOWED_HOSTS", "127.0.0.1,localhost,.vercel.app").split(",")
     if host.strip()
 ]
+for _vercel_host in (
+    ".vercel.app",
+    os.environ.get("VERCEL_URL", "").strip(),
+    os.environ.get("VERCEL_PROJECT_PRODUCTION_URL", "").strip(),
+):
+    if _vercel_host and _vercel_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_vercel_host)
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CSRF_TRUSTED_ORIGINS", "https://*.vercel.app").split(",")
+    if origin.strip()
+]
+if "https://*.vercel.app" not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS.append("https://*.vercel.app")
 
 
 # Application definition
@@ -67,6 +83,10 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # ToolUp apps
     "accounts",
+    "services",
+    "technicians",
+    "bookings",
+    "reviews",
 ]
 
 AUTH_USER_MODEL = "accounts.CustomUser"
@@ -124,7 +144,7 @@ def build_database_config(env: dict[str, str] | os._Environ[str], base_dir: Path
         port = env.get("DB_PORT", "5432").strip() or "5432"
         sslmode = env.get("DB_SSLMODE", "require").strip() or "require"
 
-    if db_host and db_name:
+    if db_host and db_name and db_password and db_password != "replace-with-supabase-db-password":
         # Supabase PgBouncer transaction pooler (port 6543) requires disabling server-side cursors.
         raw_disable_cursors = env.get("DB_DISABLE_SERVER_SIDE_CURSORS", "").strip().lower()
         disable_cursors = (
@@ -150,14 +170,28 @@ def build_database_config(env: dict[str, str] | os._Environ[str], base_dir: Path
             config["CONN_HEALTH_CHECKS"] = True
         return config
 
+    sqlite_path = Path("/tmp/db.sqlite3") if env.get("VERCEL", "").strip() else base_dir / "db.sqlite3"
     return {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": base_dir / "db.sqlite3",
+        "NAME": sqlite_path,
     }
 
 
+_RUNNING_TESTS = "test" in sys.argv and os.environ.get("USE_POSTGRES_FOR_TESTS", "").strip().lower() not in (
+    "1",
+    "true",
+    "yes",
+)
+
 DATABASES = {
-    "default": build_database_config(os.environ, BASE_DIR),
+    "default": (
+        {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+        if _RUNNING_TESTS
+        else build_database_config(os.environ, BASE_DIR)
+    ),
 }
 
 
@@ -186,8 +220,9 @@ USE_TZ = True
 
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Media uploads (e.g., technician verification documents)
 MEDIA_URL = "media/"
