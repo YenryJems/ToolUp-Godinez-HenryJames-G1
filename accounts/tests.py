@@ -437,3 +437,54 @@ class ToolUpUIRoutesTests(TestCase):
             403,
         )
 
+
+class DatabaseConfigurationTests(TestCase):
+    """Verify Supabase PostgreSQL and SQLite fallback environment configuration."""
+
+    def test_falls_back_to_sqlite_when_postgres_vars_unset(self) -> None:
+        from pathlib import Path
+        from toolup.settings import build_database_config
+
+        cfg = build_database_config({}, Path("/tmp/project"))
+        self.assertEqual(cfg["ENGINE"], "django.db.backends.sqlite3")
+        self.assertEqual(cfg["NAME"], Path("/tmp/project/db.sqlite3"))
+
+    def test_parses_supabase_database_url_and_transaction_pooler(self) -> None:
+        from pathlib import Path
+        from toolup.settings import build_database_config
+
+        cfg = build_database_config(
+            {
+                "DATABASE_URL": "postgresql://postgres.abc123:p%40ss%23word@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require",
+            },
+            Path("/tmp/project"),
+        )
+        self.assertEqual(cfg["ENGINE"], "django.db.backends.postgresql")
+        self.assertEqual(cfg["NAME"], "postgres")
+        self.assertEqual(cfg["USER"], "postgres.abc123")
+        self.assertEqual(cfg["PASSWORD"], "p@ss#word")
+        self.assertEqual(cfg["HOST"], "aws-0-ap-southeast-1.pooler.supabase.com")
+        self.assertEqual(cfg["PORT"], "6543")
+        self.assertTrue(cfg["DISABLE_SERVER_SIDE_CURSORS"])
+        self.assertEqual(cfg["CONN_MAX_AGE"], 0)
+        self.assertEqual(cfg["OPTIONS"]["sslmode"], "require")
+
+    def test_parses_individual_db_fields_for_session_pooler(self) -> None:
+        from pathlib import Path
+        from toolup.settings import build_database_config
+
+        cfg = build_database_config(
+            {
+                "DB_HOST": "aws-0-ap-southeast-1.pooler.supabase.com",
+                "DB_NAME": "postgres",
+                "DB_USER": "postgres.xyz789",
+                "DB_PASSWORD": "secret",
+                "DB_PORT": "5432",
+            },
+            Path("/tmp/project"),
+        )
+        self.assertEqual(cfg["ENGINE"], "django.db.backends.postgresql")
+        self.assertEqual(cfg["PORT"], "5432")
+        self.assertFalse(cfg["DISABLE_SERVER_SIDE_CURSORS"])
+        self.assertEqual(cfg["OPTIONS"]["sslmode"], "require")
+
