@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Verification Documents | ToolUp{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+  <div>
+    <h1 class="h3 fw-bold mb-1">Technician Verification Documents</h1>
+    <p class="text-muted mb-0">
+      Submit your Trade License, Barangay Clearance, and Government ID for Admin review.
+    </p>
+  </div>
+  <a href="{% url 'accounts:technician_dashboard' %}" class="btn btn-outline-secondary btn-sm">
+    Back to Dashboard
+  </a>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+      <div class="fw-bold">Verification Progress</div>
+      <span class="small text-muted">{{ approved_count }} of 3 required documents approved</span>
+    </div>
+    <div class="progress" style="height: 10px;" role="progressbar" aria-valuenow="{{ progress_percent }}" aria-valuemin="0" aria-valuemax="100">
+      <div class="progress-bar bg-success" style="width: {{ progress_percent }}%"></div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white py-3">
+        <h2 class="h5 mb-0 fw-bold">Submitted Credentials</h2>
+      </div>
+      <div class="list-group list-group-flush">
+        {% for doc in documents %}
+          <div class="list-group-item p-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+              <div>
+                <h3 class="h6 fw-bold mb-1">{{ doc.document_label }}</h3>
+                <div class="small text-muted">
+                  <i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>{{ doc.file_name }}
+                  &middot; Submitted {{ doc.submitted_at }}
+                </div>
+              </div>
+              <span class="badge badge-status-{{ doc.status|lower }}">{{ doc.status }}</span>
+            </div>
+            {% if doc.status == 'REJECTED' and doc.rejection_reason %}
+              <div class="alert alert-danger small mb-0 mt-2">
+                <strong>Admin Rejection Reason:</strong> {{ doc.rejection_reason }}
+              </div>
+            {% endif %}
+          </div>
+        {% empty %}
+          <div class="p-4 text-center text-muted">
+            No verification documents uploaded yet. Use the upload form to submit your first credential.
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3">
+        <h2 class="h5 mb-0 fw-bold">Upload or Replace Credential</h2>
+      </div>
+      <div class="card-body p-4">
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label for="doc-type" class="form-label fw-semibold">Document Type</label>
+            <select id="doc-type" name="document_type" class="form-select" required>
+              <option value="TRADE_LICENSE">Trade License / TESDA NC</option>
+              <option value="BARANGAY_CLEARANCE">Cebu City Barangay Clearance</option>
+              <option value="GOVERNMENT_ID">Valid Government ID</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="doc-file" class="form-label fw-semibold">Credential File</label>
+            <input
+              type="file"
+              id="doc-file"
+              name="file_path"
+              class="form-control"
+              accept=".pdf,.jpg,.jpeg,.png"
+              required
+            >
+            <div class="form-text">Accepted formats: PDF, JPG, PNG (max 5 MB).</div>
+          </div>
+          <div class="alert alert-light border small mb-3" role="note">
+            <i class="bi bi-lock-fill text-secondary me-1" aria-hidden="true"></i>
+            Personal documents are restricted strictly to you and ToolUp Admins.
+          </div>
+          <div class="d-grid">
+            <button type="submit" class="btn btn-primary">Upload Document for Review</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -3,36 +3,206 @@
 {% block title %}ToolUp | Trusted Cebu City Handymen{% endblock %}
 
 {% block content %}
-<div class="row align-items-center py-4 g-4">
+<section class="toolup-hero p-4 p-md-5 mb-5 shadow-sm">
+  <div class="row align-items-center g-4">
+    <div class="col-lg-7">
+      <span class="badge bg-warning text-dark mb-3">
+        <i class="bi bi-patch-check-fill me-1" aria-hidden="true"></i>Cebu City Local Service Directory
+      </span>
+      <h1 class="display-5 fw-bold mb-3">Find Verified Local Handymen Across Cebu City</h1>
+      <p class="lead text-muted-light mb-4">
+        Search admin-verified plumbing, electrical, and IT troubleshooting technicians across all
+        80 Cebu City barangays. Check real homeowner ratings and book an open time slot.
+      </p>
+      <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'directory' %}" class="btn btn-warning btn-lg fw-semibold">
+          <i class="bi bi-search me-1" aria-hidden="true"></i>Browse Directory
+        </a>
+        <a href="{% url 'accounts:register' %}" class="btn btn-light btn-lg">Create an Account</a>
+        <a href="{% url 'accounts:login' %}" class="btn btn-outline-light btn-lg">Sign In</a>
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="card border-0 shadow text-dark">
+        <div class="card-body p-4">
+          <h2 class="h5 fw-bold mb-3">
+            <i class="bi bi-funnel text-primary me-1" aria-hidden="true"></i>Quick Technician Search
+          </h2>
+          <form method="get" action="{% url 'directory' %}">
+            <div class="mb-3">
+              <label for="home-search-q" class="form-label small fw-semibold">Household Issue or Keyword</label>
+              <input
+                type="text"
+                id="home-search-q"
+                name="q"
+                class="form-control"
+                placeholder="e.g., pipe leak, circuit breaker, Wi-Fi"
+              >
+            </div>
+            <div class="mb-3">
+              <label for="home-search-category" class="form-label small fw-semibold">Trade Category</label>
+              <select id="home-search-category" name="category" class="form-select">
+                <option value="">All Categories</option>
+                {% for cat in categories %}
+                  <option value="{{ cat.slug }}">{{ cat.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="home-search-barangay" class="form-label small fw-semibold">Cebu City Barangay</label>
+              <select id="home-search-barangay" name="barangay" class="form-select">
+                <option value="">All 80 Cebu City Barangays</option>
+                {% for brgy in barangays %}
+                  <option value="{{ brgy }}">{{ brgy }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="d-grid">
+              <button type="submit" class="btn btn-primary fw-semibold">Search Verified Technicians</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mb-5">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+      <h2 class="h4 fw-bold mb-1">Core Service Categories</h2>
+      <p class="text-muted small mb-0">Filter verified Cebu City tradesmen by household repair need.</p>
+    </div>
+    <a href="{% url 'directory' %}" class="btn btn-outline-primary btn-sm">View Full Directory</a>
+  </div>
+  <div class="row g-3">
+    {% for cat in categories %}
+      <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100 card-hover">
+          <div class="card-body p-4 d-flex flex-column">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <span class="badge bg-primary-subtle text-primary fs-6 px-3 py-2">
+                <i class="bi {{ cat.icon }} me-1" aria-hidden="true"></i>{{ cat.name }}
+              </span>
+              <span class="text-muted small fw-semibold">{{ cat.tech_count }} verified</span>
+            </div>
+            <p class="text-muted small flex-grow-1 mb-3">{{ cat.description }}</p>
+            <a
+              href="{% url 'directory' %}?category={{ cat.slug }}"
+              class="btn btn-outline-primary btn-sm align-self-start"
+            >
+              Browse {{ cat.name }} <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="mb-5">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+      <h2 class="h4 fw-bold mb-1">Featured Verified Technicians</h2>
+      <p class="text-muted small mb-0">Only admin-verified technicians currently accepting bookings appear here.</p>
+    </div>
+    <a href="{% url 'directory' %}" class="btn btn-outline-dark btn-sm">See All Technicians</a>
+  </div>
+  <div class="row g-3">
+    {% for tech in featured_technicians %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm h-100 card-hover">
+          <div class="card-body p-4 d-flex flex-column">
+            <div class="d-flex align-items-start gap-3 mb-3">
+              <div class="avatar-circle bg-primary text-white">{{ tech.initials }}</div>
+              <div class="flex-grow-1">
+                <div class="d-flex flex-wrap align-items-center gap-1 mb-1">
+                  <h3 class="h6 fw-bold mb-0">{{ tech.full_name }}</h3>
+                  <span class="badge badge-status-verified small">
+                    <i class="bi bi-patch-check-fill me-1" aria-hidden="true"></i>Verified
+                  </span>
+                </div>
+                <div class="small text-muted">
+                  {{ tech.category_name }} &middot; Brgy. {{ tech.barangay }}
+                </div>
+              </div>
+            </div>
+            <p class="small text-muted flex-grow-1 mb-3">{{ tech.bio|truncatewords:20 }}</p>
+            <div class="d-flex justify-content-between align-items-center border-top pt-3 mb-3 small">
+              <div>
+                <span class="star-rating fw-semibold">
+                  <i class="bi bi-star-fill" aria-hidden="true"></i> {{ tech.avg_rating }}
+                </span>
+                <span class="text-muted">({{ tech.review_count }} reviews)</span>
+              </div>
+              <div class="fw-bold text-dark">&#8369;{{ tech.hourly_rate }}/hr</div>
+            </div>
+            <div class="d-flex gap-2">
+              <a href="{% url 'technician_detail' tech.id %}" class="btn btn-outline-secondary btn-sm flex-fill">
+                View Profile
+              </a>
+              <a href="{% url 'booking_create' tech.id %}" class="btn btn-primary btn-sm flex-fill">
+                Book Slot
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="row g-4 align-items-stretch">
   <div class="col-lg-7">
-    <span class="badge bg-warning text-dark mb-2">Cebu City Local Service Platform</span>
-    <h1 class="display-5 fw-bold mb-3">Find Verified Local Handymen Across Cebu City</h1>
-    <p class="lead text-muted mb-4">
-      ToolUp connects Cebu City homeowners with admin-verified plumbing, electrical, and IT
-      repair technicians across all 80 barangays.
-    </p>
-    <div class="d-flex flex-wrap gap-2">
-      <a href="{% url 'accounts:register' %}" class="btn btn-primary btn-lg">Create an Account</a>
-      <a href="{% url 'accounts:login' %}" class="btn btn-outline-dark btn-lg">Sign In</a>
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body p-4">
+        <h2 class="h5 fw-bold mb-3">How ToolUp Works</h2>
+        <div class="row g-3">
+          <div class="col-sm-4">
+            <div class="p-3 rounded bg-light h-100">
+              <div class="fw-bold text-primary mb-1">1. Search &amp; Compare</div>
+              <p class="small text-muted mb-0">
+                Filter verified technicians by trade, household issue keyword, and Cebu City barangay.
+              </p>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="p-3 rounded bg-light h-100">
+              <div class="fw-bold text-primary mb-1">2. Pick an Open Slot</div>
+              <p class="small text-muted mb-0">
+                Choose a future date and open 2-hour window. Booked slots are locked automatically.
+              </p>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="p-3 rounded bg-light h-100">
+              <div class="fw-bold text-primary mb-1">3. Track &amp; Review</div>
+              <p class="small text-muted mb-0">
+                Follow job status from Pending to Completed, then rate your technician 1&ndash;5 stars.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-lg-5">
-    <div class="card shadow-sm border-0">
+    <div class="card border-0 shadow-sm h-100">
       <div class="card-body p-4">
         <h2 class="h5 fw-bold mb-3">Platform Roles</h2>
-        <ul class="list-group list-group-flush">
+        <ul class="list-group list-group-flush small">
           <li class="list-group-item px-0">
             <strong>Clients (Homeowners):</strong> Search verified tradesmen by barangay and schedule visits.
           </li>
           <li class="list-group-item px-0">
-            <strong>Technicians (Handymen):</strong> Submit trade credentials, manage bookings, and build trust.
+            <strong>Technicians (Handymen):</strong> Submit trade license, barangay clearance, and government ID to get verified.
           </li>
           <li class="list-group-item px-0">
-            <strong>Admins:</strong> Review verification documents and keep the directory safe.
+            <strong>Admins:</strong> Review credentials, approve or reject documents with reasons, and manage user access.
           </li>
         </ul>
       </div>
     </div>
   </div>
-</div>
+</section>
 {% endblock %}

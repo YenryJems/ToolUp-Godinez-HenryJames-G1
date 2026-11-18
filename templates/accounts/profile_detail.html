@@ -33,10 +33,20 @@
           <dd class="col-sm-8 mb-0">{{ profile_user.date_joined|date:"F j, Y, g:i A" }}</dd>
         </dl>
       </div>
-      <div class="card-footer bg-white py-3">
+      <div class="card-footer bg-white py-3 d-flex flex-wrap justify-content-between gap-2">
         <a href="{% url 'accounts:dashboard' %}" class="btn btn-outline-secondary btn-sm">
           Back to Dashboard
         </a>
+        {% if user.is_technician %}
+          <div class="d-flex gap-2">
+            <a href="{% url 'technician_profile_edit' %}" class="btn btn-outline-primary btn-sm">
+              Service Options
+            </a>
+            <a href="{% url 'technician_verification' %}" class="btn btn-outline-dark btn-sm">
+              Verification Documents
+            </a>
+          </div>
+        {% endif %}
       </div>
     </div>
   </div>

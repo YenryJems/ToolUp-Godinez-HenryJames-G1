@@ -10,6 +10,9 @@
         <h1 class="h4 mb-0 fw-bold">Create a ToolUp Account</h1>
       </div>
       <div class="card-body p-4">
+        <div class="alert alert-light border small mb-3" role="note">
+          <strong>Cebu City Platform Notice:</strong> Homeowners can browse and book right away. Technicians must upload a Trade License, Barangay Clearance, and Government ID for Admin verification before appearing in search.
+        </div>
         <form method="post" novalidate>
           {% csrf_token %}
           {% if form.non_field_errors %}
