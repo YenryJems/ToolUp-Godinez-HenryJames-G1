@@ -1,4 +1,4 @@
-"""Views for ToolUp registration, authentication, role dashboards, profiles, and UI flows."""
+"""Views for ToolUp registration, authentication, role dashboards, profiles, and booking flows."""
 
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.exceptions import PermissionDenied
+from django.db import IntegrityError, transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
@@ -14,22 +15,27 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 
+from bookings.models import Booking
 from config.constants import CEBU_CITY_BARANGAY_NAMES, CEBU_CITY_BARANGAY_SET, TIME_SLOTS
+from reviews.models import Review
+from services.models import ServiceCategory
+from technicians.models import TechnicianProfile, VerificationDocument
 
 from .forms import CustomLoginForm, CustomUserRegistrationForm, UserProfileUpdateForm
 from .mixins import AdminRequiredMixin, ClientRequiredMixin, TechnicianRequiredMixin
 from .models import CustomUser
 from .ui_data import (
-    DEMO_BOOKINGS,
-    DEMO_REVIEWS_BY_TECH,
-    DEMO_TECH_READINESS,
-    DEMO_TECHNICIANS,
-    DEMO_VERIFICATION_DOCS,
     TIME_SLOT_LABELS,
+    build_readiness_list,
+    ensure_default_categories,
+    ensure_technician_profile,
     filter_verified_technicians,
-    get_booking_by_id,
     get_categories_with_counts,
-    get_technician_by_id,
+    get_taken_slots,
+    serialize_booking,
+    serialize_document,
+    serialize_review,
+    serialize_technician,
 )
 
 ALLOWED_DOC_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
@@ -48,9 +54,11 @@ class HomeView(TemplateView):
 
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
+        ensure_default_categories()
+        featured = filter_verified_technicians()[:3]
         context["categories"] = get_categories_with_counts()
         context["barangays"] = CEBU_CITY_BARANGAY_NAMES
-        context["featured_technicians"] = DEMO_TECHNICIANS[:3]
+        context["featured_technicians"] = featured
         return context
 
 
@@ -69,6 +77,8 @@ class RegisterView(CreateView):
 
     def form_valid(self, form):
         response = super().form_valid(form)
+        if self.object.role == CustomUser.Role.TECHNICIAN:
+            ensure_technician_profile(self.object)
         messages.success(
             self.request,
             "Account created successfully! Please log in with your new credentials.",
@@ -134,9 +144,18 @@ class ClientDashboardView(ClientRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
         selected_status = self.request.GET.get("status", "").strip().upper()
-        bookings = DEMO_BOOKINGS
-        if selected_status in {"PENDING", "ACCEPTED", "COMPLETED", "CANCELLED"}:
-            bookings = [b for b in DEMO_BOOKINGS if b["status"] == selected_status]
+        qs = (
+            Booking.objects.select_related(
+                "client",
+                "technician__user",
+                "technician__category",
+                "review",
+            )
+            .filter(client=self.request.user)
+            .order_by("-created_at", "-id")
+        )
+        if selected_status in set(Booking.Status.values):
+            qs = qs.filter(status=selected_status)
         else:
             selected_status = ""
 
@@ -144,7 +163,7 @@ class ClientDashboardView(ClientRequiredMixin, TemplateView):
         context["categories"] = get_categories_with_counts()
         context["barangays"] = CEBU_CITY_BARANGAY_NAMES
         context["selected_status"] = selected_status
-        context["client_bookings"] = bookings
+        context["client_bookings"] = [serialize_booking(b) for b in qs]
         return context
 
 
@@ -155,12 +174,26 @@ class TechnicianDashboardView(TechnicianRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
-        context["tech_profile"] = DEMO_TECHNICIANS[0]
-        context["tech_documents"] = [
-            d for d in DEMO_VERIFICATION_DOCS if d["technician_id"] == 7
-        ]
-        context["tech_reviews"] = DEMO_REVIEWS_BY_TECH.get(1, [])
-        context["tech_bookings"] = DEMO_BOOKINGS
+        profile = ensure_technician_profile(self.request.user)
+        docs = VerificationDocument.objects.select_related(
+            "technician__user", "technician__category"
+        ).filter(technician=profile)
+        reviews = Review.objects.select_related("client").filter(technician=profile)[:5]
+        bookings = (
+            Booking.objects.select_related(
+                "client",
+                "technician__user",
+                "technician__category",
+                "review",
+            )
+            .filter(technician=profile)
+            .order_by("-created_at", "-id")
+        )
+
+        context["tech_profile"] = serialize_technician(profile)
+        context["tech_documents"] = [serialize_document(d) for d in docs]
+        context["tech_reviews"] = [serialize_review(r) for r in reviews]
+        context["tech_bookings"] = [serialize_booking(b) for b in bookings]
         return context
 
 
@@ -172,14 +205,16 @@ class AdminDashboardView(AdminRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
         users_qs = CustomUser.objects.order_by("-date_joined", "username")
-        pending_docs = [d for d in DEMO_VERIFICATION_DOCS if d["status"] == "PENDING"]
+        pending_docs_qs = VerificationDocument.objects.select_related(
+            "technician__user", "technician__category"
+        ).filter(status=VerificationDocument.Status.PENDING)
         context["users_list"] = users_qs
         context["total_users"] = users_qs.count()
         context["client_count"] = users_qs.filter(role=CustomUser.Role.CLIENT).count()
         context["technician_count"] = users_qs.filter(role=CustomUser.Role.TECHNICIAN).count()
         context["active_users_count"] = users_qs.filter(is_active=True).count()
-        context["pending_documents"] = pending_docs
-        context["pending_docs_count"] = len(pending_docs)
+        context["pending_documents"] = [serialize_document(d) for d in pending_docs_qs]
+        context["pending_docs_count"] = pending_docs_qs.count()
         return context
 
 
@@ -254,6 +289,7 @@ class ServiceDirectoryView(TemplateView):
 
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
+        ensure_default_categories()
         query = self.request.GET.get("q", "").strip()
         selected_category = self.request.GET.get("category", "").strip()
         selected_barangay = self.request.GET.get("barangay", "").strip()
@@ -278,13 +314,27 @@ class TechnicianPublicProfileView(TemplateView):
 
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
-        tech = get_technician_by_id(self.kwargs["pk"])
-        if tech is None or not tech["is_verified"]:
+        profile = (
+            TechnicianProfile.objects.select_related("user", "category")
+            .filter(pk=self.kwargs["pk"], is_verified=True, user__is_active=True)
+            .first()
+        )
+        if profile is None:
             raise Http404("Verified technician profile not found.")
-        context["technician"] = tech
-        context["reviews"] = DEMO_REVIEWS_BY_TECH.get(tech["id"], [])
+
+        taken = get_taken_slots(profile, timezone.localdate())
+        reviews = Review.objects.select_related("client").filter(technician=profile)
+        approved_labels = [
+            doc.get_document_type_display()
+            for doc in profile.verification_documents.filter(
+                status=VerificationDocument.Status.APPROVED
+            )
+        ]
+
+        context["technician"] = serialize_technician(profile, taken_slots=taken)
+        context["reviews"] = [serialize_review(r) for r in reviews]
         context["time_slots"] = TIME_SLOTS
-        context["verified_docs"] = [
+        context["verified_docs"] = approved_labels or [
             "Trade License",
             "Barangay Clearance",
             "Government ID",
@@ -299,15 +349,26 @@ class TechnicianServiceOptionsView(TechnicianRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
-        context["tech_profile"] = DEMO_TECHNICIANS[0]
+        ensure_default_categories()
+        profile = ensure_technician_profile(self.request.user)
+        context["tech_profile"] = serialize_technician(profile)
         context["categories"] = get_categories_with_counts()
         context["barangays"] = CEBU_CITY_BARANGAY_NAMES
         return context
 
     def post(self, request, *args, **kwargs):
+        ensure_default_categories()
+        profile = ensure_technician_profile(request.user)
+        category_slug = request.POST.get("category", "").strip()
         barangay = request.POST.get("barangay", "").strip()
         raw_rate = request.POST.get("hourly_rate", "").strip()
         bio = request.POST.get("bio", "").strip()
+        is_accepting = "is_accepting_bookings" in request.POST
+
+        category = ServiceCategory.objects.filter(slug=category_slug).first()
+        if category is None:
+            messages.error(request, "Please choose a valid service category.")
+            return self.get(request, *args, **kwargs)
 
         if barangay not in CEBU_CITY_BARANGAY_SET:
             messages.error(request, "Please select a valid Cebu City barangay.")
@@ -325,10 +386,15 @@ class TechnicianServiceOptionsView(TechnicianRequiredMixin, TemplateView):
             messages.error(request, "Please enter a trade bio describing the issues you handle.")
             return self.get(request, *args, **kwargs)
 
-        messages.success(
-            request,
-            "Service options validated! Persistent updates will save once the technicians module is connected.",
+        profile.category = category
+        profile.barangay = barangay
+        profile.hourly_rate = rate
+        profile.bio = bio
+        profile.is_accepting_bookings = is_accepting
+        profile.save(
+            update_fields=["category", "barangay", "hourly_rate", "bio", "is_accepting_bookings"]
         )
+        messages.success(request, "Your service options have been saved.")
         return redirect("technician_profile_edit")
 
 
@@ -339,18 +405,27 @@ class TechnicianVerificationUploadView(TechnicianRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
-        docs = [d for d in DEMO_VERIFICATION_DOCS if d["technician_id"] == 7]
-        approved_count = sum(1 for d in docs if d["status"] == "APPROVED")
-        context["documents"] = docs
+        profile = ensure_technician_profile(self.request.user)
+        docs = list(
+            VerificationDocument.objects.select_related(
+                "technician__user", "technician__category"
+            ).filter(technician=profile)
+        )
+        approved_types = {
+            d.document_type for d in docs if d.status == VerificationDocument.Status.APPROVED
+        }
+        approved_count = len(approved_types)
+        context["documents"] = [serialize_document(d) for d in docs]
         context["approved_count"] = approved_count
         context["progress_percent"] = int((approved_count / 3) * 100)
         return context
 
     def post(self, request, *args, **kwargs):
+        profile = ensure_technician_profile(request.user)
         doc_type = request.POST.get("document_type", "").strip()
         uploaded_file = request.FILES.get("file_path")
 
-        if doc_type not in {"TRADE_LICENSE", "BARANGAY_CLEARANCE", "GOVERNMENT_ID"}:
+        if doc_type not in set(VerificationDocument.DocumentType.values):
             messages.error(request, "Invalid verification document type selected.")
             return self.get(request, *args, **kwargs)
 
@@ -367,9 +442,18 @@ class TechnicianVerificationUploadView(TechnicianRequiredMixin, TemplateView):
             messages.error(request, "File exceeds the 5 MB maximum upload limit.")
             return self.get(request, *args, **kwargs)
 
+        VerificationDocument.objects.update_or_create(
+            technician=profile,
+            document_type=doc_type,
+            defaults={
+                "file_path": uploaded_file,
+                "status": VerificationDocument.Status.PENDING,
+                "rejection_reason": "",
+            },
+        )
         messages.success(
             request,
-            f"Credential '{uploaded_file.name}' validated for {doc_type}. Persistent storage activates with the technicians module.",
+            f"Credential '{uploaded_file.name}' uploaded and queued for Admin review.",
         )
         return redirect("technician_verification")
 
@@ -385,34 +469,63 @@ class AdminVerificationQueueView(AdminRequiredMixin, TemplateView):
         if selected_status not in {"PENDING", "APPROVED", "REJECTED", "ALL"}:
             selected_status = "PENDING"
 
-        docs = DEMO_VERIFICATION_DOCS
-        if selected_status != "ALL":
-            docs = [d for d in DEMO_VERIFICATION_DOCS if d["status"] == selected_status]
+        base_qs = VerificationDocument.objects.select_related(
+            "technician__user", "technician__category"
+        )
+        docs_qs = base_qs if selected_status == "ALL" else base_qs.filter(status=selected_status)
 
         context["selected_status"] = selected_status
-        context["documents"] = docs
+        context["documents"] = [serialize_document(d) for d in docs_qs]
         context["counts"] = {
-            "PENDING": sum(1 for d in DEMO_VERIFICATION_DOCS if d["status"] == "PENDING"),
-            "APPROVED": sum(1 for d in DEMO_VERIFICATION_DOCS if d["status"] == "APPROVED"),
-            "REJECTED": sum(1 for d in DEMO_VERIFICATION_DOCS if d["status"] == "REJECTED"),
+            "PENDING": base_qs.filter(status=VerificationDocument.Status.PENDING).count(),
+            "APPROVED": base_qs.filter(status=VerificationDocument.Status.APPROVED).count(),
+            "REJECTED": base_qs.filter(status=VerificationDocument.Status.REJECTED).count(),
         }
-        context["readiness_list"] = DEMO_TECH_READINESS
+        context["readiness_list"] = build_readiness_list()
         return context
 
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "").strip()
+
         if action == "approve_doc":
-            messages.success(request, "Document marked APPROVED in preview queue.")
+            doc = get_object_or_404(VerificationDocument, pk=request.POST.get("doc_id"))
+            doc.status = VerificationDocument.Status.APPROVED
+            doc.rejection_reason = ""
+            doc.save(update_fields=["status", "rejection_reason"])
+            messages.success(request, f"Approved {doc.get_document_type_display()} for {doc.technician}.")
+
         elif action == "reject_doc":
+            doc = get_object_or_404(VerificationDocument, pk=request.POST.get("doc_id"))
             reason = request.POST.get("rejection_reason", "").strip()
             if not reason:
                 messages.error(request, "A rejection reason is required when rejecting a document.")
                 return redirect("admin_verification_queue")
-            messages.warning(request, f"Document marked REJECTED with reason: {reason}")
+            doc.status = VerificationDocument.Status.REJECTED
+            doc.rejection_reason = reason
+            doc.save(update_fields=["status", "rejection_reason"])
+            messages.warning(request, f"Rejected {doc.get_document_type_display()} with reason: {reason}")
+
         elif action == "verify_technician":
-            messages.success(request, "Technician verification action recorded.")
+            tech = get_object_or_404(TechnicianProfile, pk=request.POST.get("tech_id"))
+            approved_types = set(
+                tech.verification_documents.filter(
+                    status=VerificationDocument.Status.APPROVED
+                ).values_list("document_type", flat=True)
+            )
+            required_types = set(VerificationDocument.DocumentType.values)
+            if not required_types.issubset(approved_types):
+                messages.error(
+                    request,
+                    "All three required documents must be APPROVED before verifying this technician.",
+                )
+                return redirect("admin_verification_queue")
+            tech.is_verified = True
+            tech.save(update_fields=["is_verified"])
+            messages.success(request, f"{tech} is now verified and listed in the directory.")
+
         else:
             messages.error(request, "Unsupported verification queue action.")
+
         return redirect("admin_verification_queue")
 
 
@@ -421,17 +534,44 @@ class BookingCreateView(ClientRequiredMixin, TemplateView):
 
     template_name = "bookings/booking_form.html"
 
-    def _get_technician_or_404(self) -> dict:
-        tech = get_technician_by_id(self.kwargs["technician_id"])
-        if tech is None or not tech["is_verified"] or not tech["is_accepting_bookings"]:
+    def _get_technician_or_404(self) -> TechnicianProfile:
+        profile = (
+            TechnicianProfile.objects.select_related("user", "category")
+            .filter(
+                pk=self.kwargs["technician_id"],
+                is_verified=True,
+                is_accepting_bookings=True,
+                user__is_active=True,
+            )
+            .first()
+        )
+        if profile is None:
             raise Http404("Bookable verified technician not found.")
-        return tech
+        return profile
+
+    def _resolve_selected_date(self) -> date:
+        today = timezone.localdate()
+        raw_date = (
+            self.request.POST.get("service_date")
+            or self.request.GET.get("date")
+            or ""
+        ).strip()
+        if raw_date:
+            try:
+                parsed = date.fromisoformat(raw_date)
+                if parsed >= today:
+                    return parsed
+            except ValueError:
+                pass
+        return today + timedelta(days=1)
 
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
-        tech = self._get_technician_or_404()
+        profile = self._get_technician_or_404()
         today = timezone.localdate()
-        taken = set(tech["taken_slots"])
+        selected_date = self._resolve_selected_date()
+        taken = set(get_taken_slots(profile, selected_date))
+
         slot_options = []
         default_assigned = False
         for code, label in TIME_SLOTS:
@@ -448,20 +588,24 @@ class BookingCreateView(ClientRequiredMixin, TemplateView):
                 }
             )
 
-        context["technician"] = tech
+        context["technician"] = serialize_technician(profile, taken_slots=list(taken))
         context["barangays"] = CEBU_CITY_BARANGAY_NAMES
         context["slot_options"] = slot_options
         context["min_date"] = today.isoformat()
-        context["default_date"] = (today + timedelta(days=1)).isoformat()
+        context["default_date"] = selected_date.isoformat()
         return context
 
     def post(self, request, *args, **kwargs):
-        tech = self._get_technician_or_404()
+        profile = self._get_technician_or_404()
         service_date_raw = request.POST.get("service_date", "").strip()
         time_slot = request.POST.get("time_slot", "").strip()
         barangay = request.POST.get("barangay", "").strip()
         service_address = request.POST.get("service_address", "").strip()
         issue_description = request.POST.get("issue_description", "").strip()
+
+        if profile.user_id == request.user.pk:
+            messages.error(request, "You cannot book your own technician profile.")
+            return self.get(request, *args, **kwargs)
 
         try:
             parsed_date = date.fromisoformat(service_date_raw)
@@ -471,8 +615,8 @@ class BookingCreateView(ClientRequiredMixin, TemplateView):
             messages.error(request, "Service date must be today or a future date.")
             return self.get(request, *args, **kwargs)
 
-        if time_slot not in TIME_SLOT_LABELS or time_slot in tech["taken_slots"]:
-            messages.error(request, "Selected time slot is invalid or already booked.")
+        if time_slot not in TIME_SLOT_LABELS:
+            messages.error(request, "Selected time slot is invalid.")
             return self.get(request, *args, **kwargs)
 
         if barangay not in CEBU_CITY_BARANGAY_SET or not service_address:
@@ -483,62 +627,110 @@ class BookingCreateView(ClientRequiredMixin, TemplateView):
             messages.error(request, "Please describe the household repair issue.")
             return self.get(request, *args, **kwargs)
 
+        full_address = (
+            service_address
+            if barangay.lower() in service_address.lower()
+            else f"{service_address} (Brgy. {barangay}, Cebu City)"
+        )
+
+        if time_slot in set(get_taken_slots(profile, parsed_date)):
+            messages.error(request, "Selected time slot is already booked for this date.")
+            return self.get(request, *args, **kwargs)
+
+        try:
+            with transaction.atomic():
+                booking = Booking.objects.create(
+                    client=request.user,
+                    technician=profile,
+                    service_date=parsed_date,
+                    time_slot=time_slot,
+                    service_address=full_address,
+                    issue_description=issue_description,
+                    status=Booking.Status.PENDING,
+                )
+        except IntegrityError:
+            messages.error(request, "Selected time slot was just reserved. Please pick another slot.")
+            return self.get(request, *args, **kwargs)
+
         messages.success(
             request,
-            f"Booking request validated for {tech['full_name']} on {service_date_raw} ({TIME_SLOT_LABELS[time_slot]}).",
+            f"Booking #{booking.pk} created for {profile.user.get_full_name() or profile.user.username} on {service_date_raw} ({TIME_SLOT_LABELS[time_slot]}).",
         )
-        return redirect("accounts:client_dashboard")
+        return redirect("booking_detail", pk=booking.pk)
 
 
 class BookingDetailView(LoginRequiredMixin, TemplateView):
-    """Booking details view with Section 9 role-enforced status transition controls."""
+    """Booking details view with strict ownership and Section 9 status transition controls."""
 
     template_name = "bookings/booking_detail.html"
 
-    def _get_booking_or_404(self) -> dict:
-        booking = get_booking_by_id(self.kwargs["pk"])
-        if booking is None:
-            raise Http404("Booking not found.")
+    def _get_authorized_booking(self) -> Booking:
+        booking = get_object_or_404(
+            Booking.objects.select_related(
+                "client",
+                "technician__user",
+                "technician__category",
+                "review",
+            ),
+            pk=self.kwargs["pk"],
+        )
+        user = self.request.user
+        is_owner_client = booking.client_id == user.pk
+        is_owner_tech = booking.technician.user_id == user.pk
+        if not (is_owner_client or is_owner_tech or user.is_admin_role):
+            raise PermissionDenied("You do not have permission to view this booking.")
         return booking
 
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
-        context["booking"] = self._get_booking_or_404()
+        booking = self._get_authorized_booking()
+        context["booking"] = serialize_booking(booking)
         return context
 
     def post(self, request, *args, **kwargs):
-        booking = self._get_booking_or_404()
+        booking = self._get_authorized_booking()
         action = request.POST.get("action", "").strip()
-        status = booking["status"]
+        status = booking.status
         user = request.user
+        next_target = request.POST.get("next", "").strip()
 
-        if status in {"COMPLETED", "CANCELLED"}:
-            messages.error(request, f"Booking #{booking['id']} is already {status} and cannot be changed.")
-            return redirect("booking_detail", pk=booking["id"])
+        def _redirect_after():
+            if next_target == "dashboard":
+                return redirect("accounts:dashboard")
+            return redirect("booking_detail", pk=booking.pk)
 
-        if action in {"accept", "decline", "complete"} and not user.is_technician:
+        if status in {Booking.Status.COMPLETED, Booking.Status.CANCELLED}:
+            messages.error(request, f"Booking #{booking.pk} is already {status} and cannot be changed.")
+            return _redirect_after()
+
+        is_owner_tech = user.is_technician and booking.technician.user_id == user.pk
+        is_owner_client = user.is_client and booking.client_id == user.pk
+
+        if action in {"accept", "decline", "complete"} and not is_owner_tech:
             raise PermissionDenied("Only the assigned technician can perform this transition.")
 
-        if action == "cancel" and not (user.is_client or user.is_technician):
-            raise PermissionDenied("Only the booking client or technician can cancel a booking.")
+        if action == "cancel" and not (is_owner_client or is_owner_tech):
+            raise PermissionDenied("Only the booking client or assigned technician can cancel a booking.")
 
         valid_transitions = {
-            ("PENDING", "accept"): "ACCEPTED",
-            ("PENDING", "decline"): "CANCELLED",
-            ("PENDING", "cancel"): "CANCELLED",
-            ("ACCEPTED", "complete"): "COMPLETED",
-            ("ACCEPTED", "cancel"): "CANCELLED",
+            (Booking.Status.PENDING, "accept"): Booking.Status.ACCEPTED,
+            (Booking.Status.PENDING, "decline"): Booking.Status.CANCELLED,
+            (Booking.Status.PENDING, "cancel"): Booking.Status.CANCELLED,
+            (Booking.Status.ACCEPTED, "complete"): Booking.Status.COMPLETED,
+            (Booking.Status.ACCEPTED, "cancel"): Booking.Status.CANCELLED,
         }
         next_status = valid_transitions.get((status, action))
         if next_status is None:
             messages.error(request, f"Transition '{action}' is not allowed from {status}.")
-            return redirect("booking_detail", pk=booking["id"])
+            return _redirect_after()
 
+        booking.status = next_status
+        booking.save(update_fields=["status"])
         messages.success(
             request,
-            f"Booking #{booking['id']} transition {status} -> {next_status} validated.",
+            f"Booking #{booking.pk} updated: {status} -> {next_status}.",
         )
-        return redirect("booking_detail", pk=booking["id"])
+        return _redirect_after()
 
 
 class ReviewCreateView(ClientRequiredMixin, TemplateView):
@@ -546,19 +738,34 @@ class ReviewCreateView(ClientRequiredMixin, TemplateView):
 
     template_name = "reviews/review_form.html"
 
-    def _get_completed_booking_or_404(self) -> dict:
-        booking = get_booking_by_id(self.kwargs["booking_id"])
-        if booking is None or booking["status"] != "COMPLETED":
+    def _get_completed_booking_or_404(self) -> Booking:
+        booking = get_object_or_404(
+            Booking.objects.select_related(
+                "client",
+                "technician__user",
+                "technician__category",
+                "review",
+            ),
+            pk=self.kwargs["booking_id"],
+        )
+        if booking.client_id != self.request.user.pk:
+            raise PermissionDenied("You can only review your own completed bookings.")
+        if booking.status != Booking.Status.COMPLETED:
             raise Http404("Completed booking not found for review.")
         return booking
 
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
-        context["booking"] = self._get_completed_booking_or_404()
+        booking = self._get_completed_booking_or_404()
+        context["booking"] = serialize_booking(booking)
         return context
 
     def post(self, request, *args, **kwargs):
         booking = self._get_completed_booking_or_404()
+        if hasattr(booking, "review"):
+            messages.error(request, "You have already submitted a review for this booking.")
+            return redirect("booking_detail", pk=booking.pk)
+
         raw_rating = request.POST.get("rating", "").strip()
         comment = request.POST.get("comment", "").strip()
 
@@ -574,8 +781,16 @@ class ReviewCreateView(ClientRequiredMixin, TemplateView):
             messages.error(request, "Please enter a brief review comment.")
             return self.get(request, *args, **kwargs)
 
+        Review.objects.create(
+            booking=booking,
+            client=request.user,
+            technician=booking.technician,
+            rating=rating,
+            comment=comment,
+        )
+        tech_name = booking.technician.user.get_full_name() or booking.technician.user.username
         messages.success(
             request,
-            f"Thank you! Your {rating}-star review for {booking['technician_name']} has been validated.",
+            f"Thank you! Your {rating}-star review for {tech_name} has been published.",
         )
-        return redirect("accounts:client_dashboard")
+        return redirect("technician_detail", pk=booking.technician_id)

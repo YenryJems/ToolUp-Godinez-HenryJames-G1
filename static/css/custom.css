@@ -84,6 +84,12 @@ body {
   border: 1px solid #f1aeb5;
 }
 
+.badge-status-missing {
+  background-color: #e2e8f0;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
 /* Star Rating Display & Interactive 1-5 Selector */
 .star-rating {
   color: #f59e0b;
