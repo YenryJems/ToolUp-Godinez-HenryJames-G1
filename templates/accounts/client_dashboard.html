@@ -10,7 +10,12 @@
       Welcome, {{ user.get_full_name|default:user.username }}. Manage your Cebu City service requests.
     </p>
   </div>
-  <a href="{% url 'accounts:profile' %}" class="btn btn-outline-primary">View My Profile</a>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{% url 'directory' %}" class="btn btn-primary">
+      <i class="bi bi-search me-1" aria-hidden="true"></i>Find a Handyman
+    </a>
+    <a href="{% url 'accounts:profile' %}" class="btn btn-outline-primary">View My Profile</a>
+  </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -43,14 +48,137 @@
   </div>
 </div>
 
-<div class="card shadow-sm border-0">
-  <div class="card-header bg-white py-3">
-    <h2 class="h5 mb-0 fw-bold">Your Bookings & Directory Access</h2>
-  </div>
+<div class="card shadow-sm border-0 mb-4">
   <div class="card-body">
-    <p class="text-muted mb-0">
-      The Cebu City verified technician directory, booking schedule selector, and booking tracker will appear here as the service and booking modules are connected.
-    </p>
+    <form method="get" action="{% url 'directory' %}" class="row g-2 align-items-end">
+      <div class="col-md-5">
+        <label for="client-quick-q" class="form-label small fw-semibold mb-1">Quick Search Directory</label>
+        <input
+          type="text"
+          id="client-quick-q"
+          name="q"
+          class="form-control"
+          placeholder="Search household issue (e.g., clogged drain, wiring, router)"
+        >
+      </div>
+      <div class="col-md-3">
+        <label for="client-quick-cat" class="form-label small fw-semibold mb-1">Trade Category</label>
+        <select id="client-quick-cat" name="category" class="form-select">
+          <option value="">All Categories</option>
+          {% for cat in categories %}
+            <option value="{{ cat.slug }}">{{ cat.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label for="client-quick-brgy" class="form-label small fw-semibold mb-1">Barangay</label>
+        <select id="client-quick-brgy" name="barangay" class="form-select">
+          <option value="">Any Barangay</option>
+          {% for brgy in barangays %}
+            <option value="{{ brgy }}">{{ brgy }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2 d-grid">
+        <button type="submit" class="btn btn-dark">Search</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <h2 class="h5 mb-0 fw-bold">My Service Bookings</h2>
+      <p class="small text-muted mb-0">Track requests, cancel pending/accepted visits, and review completed jobs.</p>
+    </div>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Filter bookings by status">
+      <a
+        href="{% url 'accounts:client_dashboard' %}"
+        class="btn {% if not selected_status %}btn-dark{% else %}btn-outline-secondary{% endif %}"
+      >All</a>
+      <a
+        href="?status=PENDING"
+        class="btn {% if selected_status == 'PENDING' %}btn-dark{% else %}btn-outline-secondary{% endif %}"
+      >Pending</a>
+      <a
+        href="?status=ACCEPTED"
+        class="btn {% if selected_status == 'ACCEPTED' %}btn-dark{% else %}btn-outline-secondary{% endif %}"
+      >Accepted</a>
+      <a
+        href="?status=COMPLETED"
+        class="btn {% if selected_status == 'COMPLETED' %}btn-dark{% else %}btn-outline-secondary{% endif %}"
+      >Completed</a>
+      <a
+        href="?status=CANCELLED"
+        class="btn {% if selected_status == 'CANCELLED' %}btn-dark{% else %}btn-outline-secondary{% endif %}"
+      >Cancelled</a>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Booking</th>
+          <th>Technician</th>
+          <th>Schedule</th>
+          <th>Cebu City Address</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for booking in client_bookings %}
+          <tr>
+            <td>
+              <div class="fw-semibold">#{{ booking.id }}</div>
+              <div class="small text-muted">{{ booking.issue_description|truncatewords:9 }}</div>
+            </td>
+            <td>
+              <a href="{% url 'technician_detail' booking.technician_id %}" class="fw-semibold text-decoration-none">
+                {{ booking.technician_name }}
+              </a>
+              <div class="small text-muted">{{ booking.category_name }}</div>
+            </td>
+            <td>
+              <div class="fw-semibold">{{ booking.service_date }}</div>
+              <div class="small text-muted">{{ booking.time_slot_label }}</div>
+            </td>
+            <td class="small">{{ booking.service_address }}</td>
+            <td>
+              <span class="badge badge-status-{{ booking.status|lower }}">{{ booking.status }}</span>
+            </td>
+            <td class="text-end">
+              <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
+                <a href="{% url 'booking_detail' booking.id %}" class="btn btn-outline-secondary btn-sm">
+                  Details
+                </a>
+                {% if booking.status == 'PENDING' or booking.status == 'ACCEPTED' %}
+                  <form method="post" action="{% url 'booking_detail' booking.id %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="cancel">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Cancel</button>
+                  </form>
+                {% elif booking.status == 'COMPLETED' and not booking.has_review %}
+                  <a href="{% url 'review_create' booking.id %}" class="btn btn-warning btn-sm fw-semibold">
+                    Write Review
+                  </a>
+                {% elif booking.status == 'COMPLETED' and booking.has_review %}
+                  <span class="badge bg-light text-dark border align-self-center">Reviewed</span>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-5">
+              <p class="text-muted mb-2">No service bookings match this filter yet.</p>
+              <a href="{% url 'directory' %}" class="btn btn-primary btn-sm">Browse Verified Technicians</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 {% endblock %}

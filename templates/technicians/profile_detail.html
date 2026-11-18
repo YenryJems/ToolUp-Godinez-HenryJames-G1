@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}{{ technician.full_name }} | ToolUp{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb small">
+    <li class="breadcrumb-item"><a href="{% url 'directory' %}">Directory</a></li>
+    <li class="breadcrumb-item">
+      <a href="{% url 'directory' %}?category={{ technician.category_slug }}">{{ technician.category_name }}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">{{ technician.full_name }}</li>
+  </ol>
+</nav>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap align-items-start gap-3 mb-3">
+          <div class="avatar-circle avatar-circle-lg bg-primary text-white">{{ technician.initials }}</div>
+          <div class="flex-grow-1">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+              <h1 class="h3 fw-bold mb-0">{{ technician.full_name }}</h1>
+              {% if technician.is_verified %}
+                <span class="badge badge-status-verified">
+                  <i class="bi bi-patch-check-fill me-1" aria-hidden="true"></i>Admin Verified
+                </span>
+              {% endif %}
+              {% if technician.is_accepting_bookings %}
+                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                  Accepting Bookings
+                </span>
+              {% else %}
+                <span class="badge bg-secondary-subtle text-secondary border">
+                  Currently Unavailable
+                </span>
+              {% endif %}
+            </div>
+            <div class="text-muted mb-2">
+              <span class="me-3"><i class="bi bi-tools me-1" aria-hidden="true"></i>{{ technician.category_name }}</span>
+              <span><i class="bi bi-geo-alt-fill me-1" aria-hidden="true"></i>Barangay {{ technician.barangay }}, Cebu City</span>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-3 small">
+              <span class="star-rating fw-semibold fs-6">
+                <i class="bi bi-star-fill" aria-hidden="true"></i> {{ technician.avg_rating }} / 5.0
+              </span>
+              <span class="text-muted">({{ technician.review_count }} verified client reviews)</span>
+              <span class="fw-bold text-dark fs-6">&#8369;{{ technician.hourly_rate }} / hour</span>
+            </div>
+          </div>
+        </div>
+
+        <hr>
+
+        <h2 class="h6 text-uppercase text-muted fw-bold">About &amp; Household Issues Handled</h2>
+        <p class="mb-4">{{ technician.bio }}</p>
+
+        <h2 class="h6 text-uppercase text-muted fw-bold">Verified Credentials</h2>
+        <div class="row g-2">
+          {% for doc in verified_docs %}
+            <div class="col-sm-4">
+              <div class="p-2 px-3 rounded bg-light border d-flex align-items-center gap-2 small">
+                <i class="bi bi-check-circle-fill text-success" aria-hidden="true"></i>
+                <span>{{ doc }}</span>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0 fw-bold">Client Reviews &amp; Ratings</h2>
+        <span class="small text-muted">{{ reviews|length }} review{{ reviews|length|pluralize }}</span>
+      </div>
+      <div class="card-body p-4">
+        {% for review in reviews %}
+          <div class="{% if not forloop.last %}border-bottom pb-3 mb-3{% endif %}">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <div class="fw-semibold">{{ review.client_name }}</div>
+              <div class="star-rating small fw-semibold">
+                <i class="bi bi-star-fill" aria-hidden="true"></i> {{ review.rating }}/5
+              </div>
+            </div>
+            <p class="mb-1 text-muted">{{ review.comment }}</p>
+            <div class="small text-secondary">{{ review.created_at }}</div>
+          </div>
+        {% empty %}
+          <p class="text-muted mb-0">No client reviews yet. Be the first homeowner to book and rate this technician.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm sticky-sidebar">
+      <div class="card-header bg-white py-3">
+        <h2 class="h5 mb-0 fw-bold">Schedule a Service Visit</h2>
+      </div>
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <span class="text-muted small">Standard Rate</span>
+          <span class="h4 fw-bold mb-0">&#8369;{{ technician.hourly_rate }}<small class="text-muted fs-6">/hr</small></span>
+        </div>
+
+        <h3 class="h6 fw-semibold mb-2">Daily Fixed Time Slots</h3>
+        <ul class="list-group list-group-flush small mb-4">
+          {% for slot_code, slot_label in time_slots %}
+            <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+              <span>{{ slot_label }}</span>
+              {% if slot_code in technician.taken_slots %}
+                <span class="badge bg-secondary-subtle text-secondary">Booked Today</span>
+              {% else %}
+                <span class="badge bg-success-subtle text-success">Open</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+
+        {% if technician.is_accepting_bookings %}
+          {% if user.is_authenticated and user.is_client %}
+            <div class="d-grid">
+              <a href="{% url 'booking_create' technician.id %}" class="btn btn-primary btn-lg">
+                Proceed to Booking Form
+              </a>
+            </div>
+          {% elif user.is_authenticated %}
+            <div class="alert alert-light border small mb-0">
+              Only Client (Homeowner) accounts can submit service bookings.
+            </div>
+          {% else %}
+            <div class="d-grid gap-2">
+              <a href="{% url 'booking_create' technician.id %}" class="btn btn-primary btn-lg">
+                Book This Technician
+              </a>
+              <p class="small text-muted text-center mb-0">You will sign in as a Client to confirm your slot.</p>
+            </div>
+          {% endif %}
+        {% else %}
+          <div class="alert alert-secondary small mb-0">
+            This technician is not accepting new bookings at the moment.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

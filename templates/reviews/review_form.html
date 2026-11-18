@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Review Booking #{{ booking.id }} | ToolUp{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <span class="badge badge-status-completed">Completed Booking #{{ booking.id }}</span>
+          <span class="small text-muted">{{ booking.service_date }} &middot; {{ booking.time_slot_label }}</span>
+        </div>
+        <h1 class="h4 fw-bold mb-1">Rate Your Experience with {{ booking.technician_name }}</h1>
+        <p class="small text-muted mb-0">
+          {{ booking.category_name }} &middot; {{ booking.service_address }}
+        </p>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3">
+        <h2 class="h5 mb-0 fw-bold">Client Review &amp; Rating</h2>
+      </div>
+      <div class="card-body p-4">
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-4">
+            <div class="form-label fw-semibold mb-2">
+              Star Rating (1 to 5) <span class="text-danger">*</span>
+            </div>
+            <div class="star-rating-input" role="radiogroup" aria-label="Rating out of 5 stars">
+              <input type="radio" id="star-5" name="rating" value="5" checked required>
+              <label for="star-5" title="5 stars - Excellent">&#9733;</label>
+              <input type="radio" id="star-4" name="rating" value="4">
+              <label for="star-4" title="4 stars - Very Good">&#9733;</label>
+              <input type="radio" id="star-3" name="rating" value="3">
+              <label for="star-3" title="3 stars - Good">&#9733;</label>
+              <input type="radio" id="star-2" name="rating" value="2">
+              <label for="star-2" title="2 stars - Fair">&#9733;</label>
+              <input type="radio" id="star-1" name="rating" value="1">
+              <label for="star-1" title="1 star - Poor">&#9733;</label>
+            </div>
+            <div class="form-text">Click a star from 1 (Poor) to 5 (Excellent).</div>
+          </div>
+
+          <div class="mb-4">
+            <label for="review-comment" class="form-label fw-semibold">
+              Review Comment <span class="text-danger">*</span>
+            </label>
+            <textarea
+              id="review-comment"
+              name="comment"
+              rows="4"
+              class="form-control"
+              placeholder="Share details about punctuality, repair quality, and communication."
+              required
+            ></textarea>
+          </div>
+
+          <div class="alert alert-light border small mb-4" role="note">
+            One review is allowed per completed booking and will appear publicly on the technician's profile.
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-lg">Submit Review</button>
+            <a href="{% url 'booking_detail' booking.id %}" class="btn btn-outline-secondary btn-lg">
+              Back to Booking
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

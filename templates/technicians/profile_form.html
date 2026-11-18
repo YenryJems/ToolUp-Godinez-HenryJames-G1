@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Service Options | ToolUp{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+      <div>
+        <h1 class="h3 fw-bold mb-1">Manage Trade Profile &amp; Service Options</h1>
+        <p class="text-muted mb-0">
+          Keep your trade specialty, Cebu City barangay, bio keywords, rate, and booking availability up to date.
+        </p>
+      </div>
+      <a href="{% url 'accounts:technician_dashboard' %}" class="btn btn-outline-secondary btn-sm">
+        Back to Dashboard
+      </a>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+          <div class="small text-muted text-uppercase fw-semibold">Admin Verification Status (Read-Only)</div>
+          <div class="mt-1">
+            {% if tech_profile.is_verified %}
+              <span class="badge badge-status-verified fs-6">
+                <i class="bi bi-patch-check-fill me-1" aria-hidden="true"></i>Verified Technician
+              </span>
+            {% else %}
+              <span class="badge badge-status-pending fs-6">
+                <i class="bi bi-hourglass-split me-1" aria-hidden="true"></i>Pending Admin Approval
+              </span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="small text-muted">
+          <code>is_verified</code> changes only through Admin approval of your uploaded credentials.
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3">
+        <h2 class="h5 mb-0 fw-bold">Service Listing Details</h2>
+      </div>
+      <div class="card-body p-4">
+        <form method="post">
+          {% csrf_token %}
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label for="tech-category" class="form-label fw-semibold">Service Category</label>
+              <select id="tech-category" name="category" class="form-select" required>
+                {% for cat in categories %}
+                  <option value="{{ cat.slug }}" {% if tech_profile.category_slug == cat.slug %}selected{% endif %}>
+                    {{ cat.name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label for="tech-barangay" class="form-label fw-semibold">Cebu City Barangay</label>
+              <select id="tech-barangay" name="barangay" class="form-select" required>
+                {% for brgy in barangays %}
+                  <option value="{{ brgy }}" {% if tech_profile.barangay == brgy %}selected{% endif %}>
+                    {{ brgy }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="tech-rate" class="form-label fw-semibold">Hourly Rate (&#8369; PHP)</label>
+            <input
+              type="number"
+              id="tech-rate"
+              name="hourly_rate"
+              value="{{ tech_profile.hourly_rate }}"
+              min="0"
+              step="0.01"
+              class="form-control"
+              required
+            >
+            <div class="form-text">Must be 0.00 or higher. Displayed on the verified directory card.</div>
+          </div>
+
+          <div class="mb-3">
+            <label for="tech-bio" class="form-label fw-semibold">Trade Bio &amp; Household Issues Handled</label>
+            <textarea
+              id="tech-bio"
+              name="bio"
+              rows="4"
+              class="form-control"
+              required
+            >{{ tech_profile.bio }}</textarea>
+            <div class="form-text">
+              Homeowners search this description for specific household issues (e.g., leaks, clogged drains, circuit breakers, Wi-Fi cabling).
+            </div>
+          </div>
+
+          <div class="form-check form-switch mb-4">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              role="switch"
+              id="tech-accepting"
+              name="is_accepting_bookings"
+              {% if tech_profile.is_accepting_bookings %}checked{% endif %}
+            >
+            <label class="form-check-label fw-semibold" for="tech-accepting">
+              Accepting New Client Bookings
+            </label>
+            <div class="form-text">
+              Turn off when fully booked or on leave; paused technicians are hidden from search results.
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Save Service Options</button>
+            <a href="{% url 'accounts:technician_dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

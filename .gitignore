@@ -1,5 +1,7 @@
 # Multi-agent workspace configuration
 .agent/
+DECISIONS.md
+PROGRESS.md
 
 # Python / Virtual Environment
 .venv/

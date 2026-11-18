@@ -321,3 +321,119 @@ class UserProfileTests(TestCase):
         self.assertEqual(edit_other_post.status_code, 403)
         self.user_b.refresh_from_db()
         self.assertEqual(self.user_b.first_name, "Bob")
+
+
+class ToolUpUIRoutesTests(TestCase):
+    """Verify ToolUp directory, profile, booking, verification, and review UI routes and permissions."""
+
+    def setUp(self) -> None:
+        self.password = "StrongPass2026!"
+        self.client_user = CustomUser.objects.create_user(
+            username="ui_client",
+            email="ui_client@example.com",
+            password=self.password,
+            first_name="Clara",
+            last_name="Cebu",
+            role=CustomUser.Role.CLIENT,
+        )
+        self.tech_user = CustomUser.objects.create_user(
+            username="ui_tech",
+            email="ui_tech@example.com",
+            password=self.password,
+            first_name="Mateo",
+            last_name="Handyman",
+            role=CustomUser.Role.TECHNICIAN,
+        )
+        self.admin_user = CustomUser.objects.create_user(
+            username="ui_admin",
+            email="ui_admin@example.com",
+            password=self.password,
+            first_name="Ada",
+            last_name="Mod",
+            role=CustomUser.Role.ADMIN,
+        )
+
+    def test_home_and_directory_filters_render_cleanly(self) -> None:
+        home_resp = self.client.get(reverse("home"))
+        self.assertEqual(home_resp.status_code, 200)
+        self.assertContains(home_resp, "Quick Technician Search")
+
+        dir_resp = self.client.get(reverse("directory"))
+        self.assertEqual(dir_resp.status_code, 200)
+        self.assertContains(dir_resp, "Mateo Villanueva")
+
+        filtered_resp = self.client.get(
+            reverse("directory"),
+            {"category": "plumbing", "barangay": "Lahug", "q": "leak"},
+        )
+        self.assertEqual(filtered_resp.status_code, 200)
+        self.assertContains(filtered_resp, "Mateo Villanueva")
+        self.assertNotContains(filtered_resp, "Clarisse Mendoza")
+
+        empty_resp = self.client.get(reverse("directory"), {"q": "nonexistent_xyz_issue"})
+        self.assertEqual(empty_resp.status_code, 200)
+        self.assertContains(empty_resp, "No Verified Technicians Match Your Filters")
+
+    def test_technician_public_profile_renders_and_handles_missing(self) -> None:
+        resp = self.client.get(reverse("technician_detail", args=[1]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Mateo Villanueva")
+        self.assertContains(resp, "08:00 AM - 10:00 AM")
+
+        missing_resp = self.client.get(reverse("technician_detail", args=[9999]))
+        self.assertEqual(missing_resp.status_code, 404)
+
+    def test_technician_ui_routes_enforce_role_access(self) -> None:
+        tech_urls = [
+            reverse("technician_profile_edit"),
+            reverse("technician_verification"),
+        ]
+        for url in tech_urls:
+            self.assertEqual(self.client.get(url).status_code, 302)
+
+        self.client.force_login(self.client_user)
+        for url in tech_urls:
+            self.assertEqual(self.client.get(url).status_code, 403)
+
+        self.client.force_login(self.tech_user)
+        for url in tech_urls:
+            self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_admin_verification_queue_enforces_role_and_rejection_reason(self) -> None:
+        queue_url = reverse("admin_verification_queue")
+        self.assertEqual(self.client.get(queue_url).status_code, 302)
+
+        self.client.force_login(self.client_user)
+        self.assertEqual(self.client.get(queue_url).status_code, 403)
+
+        self.client.force_login(self.admin_user)
+        resp = self.client.get(queue_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Admin Verification Queue")
+
+        reject_missing = self.client.post(
+            queue_url,
+            {"doc_id": "201", "action": "reject_doc", "rejection_reason": ""},
+            follow=True,
+        )
+        self.assertContains(reject_missing, "rejection reason is required")
+
+    def test_booking_and_review_routes_enforce_role_and_transitions(self) -> None:
+        book_url = reverse("booking_create", args=[1])
+        review_url = reverse("review_create", args=[103])
+        detail_url = reverse("booking_detail", args=[101])
+
+        self.client.force_login(self.tech_user)
+        self.assertEqual(self.client.get(book_url).status_code, 403)
+        self.assertEqual(self.client.get(review_url).status_code, 403)
+        self.assertEqual(self.client.get(detail_url).status_code, 200)
+
+        self.client.force_login(self.client_user)
+        self.assertEqual(self.client.get(book_url).status_code, 200)
+        self.assertEqual(self.client.get(review_url).status_code, 200)
+        self.assertEqual(self.client.get(detail_url).status_code, 200)
+        self.assertEqual(
+            self.client.post(detail_url, {"action": "accept"}).status_code,
+            403,
+        )
+

@@ -1,8 +1,217 @@
-/* ToolUp custom stylesheet complementing Bootstrap 5 */
+/* ToolUp custom stylesheet complementing Bootstrap 5.3.3 */
+
+:root {
+  --toolup-navy: #0f2942;
+  --toolup-navy-soft: #1a3d5c;
+  --toolup-amber: #ffc107;
+  --toolup-bg: #f4f6f9;
+}
+
 body {
-  background-color: #f8f9fa;
+  background-color: var(--toolup-bg);
+  color: #1e293b;
 }
 
 .toolup-brand {
   letter-spacing: 0.02em;
+}
+
+/* Hero Banner */
+.toolup-hero {
+  background: linear-gradient(135deg, #0f2942 0%, #1b4965 100%);
+  color: #ffffff;
+  border-radius: 1rem;
+}
+
+.toolup-hero .text-muted-light {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+/* Interactive Card Elevation */
+.card-hover {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 0.75rem 1.5rem rgba(15, 41, 66, 0.1) !important;
+}
+
+/* Avatar Monogram Circle */
+.avatar-circle {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.05rem;
+  flex-shrink: 0;
+}
+
+.avatar-circle-lg {
+  width: 4.25rem;
+  height: 4.25rem;
+  font-size: 1.45rem;
+}
+
+/* Booking & Verification Status Badges */
+.badge-status-pending {
+  background-color: #fff3cd;
+  color: #664d03;
+  border: 1px solid #ffe69c;
+}
+
+.badge-status-accepted {
+  background-color: #cfe2ff;
+  color: #084298;
+  border: 1px solid #9ec5fe;
+}
+
+.badge-status-completed,
+.badge-status-approved,
+.badge-status-verified {
+  background-color: #d1e7dd;
+  color: #0f5132;
+  border: 1px solid #a3cfbb;
+}
+
+.badge-status-cancelled,
+.badge-status-rejected {
+  background-color: #f8d7da;
+  color: #842029;
+  border: 1px solid #f1aeb5;
+}
+
+/* Star Rating Display & Interactive 1-5 Selector */
+.star-rating {
+  color: #f59e0b;
+  letter-spacing: 0.05em;
+}
+
+.star-rating-input {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  gap: 0.35rem;
+}
+
+.star-rating-input input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.star-rating-input label {
+  cursor: pointer;
+  font-size: 1.9rem;
+  color: #cbd5e1;
+  transition: color 0.15s ease, transform 0.12s ease;
+  line-height: 1;
+}
+
+.star-rating-input label:hover,
+.star-rating-input label:hover ~ label,
+.star-rating-input input[type="radio"]:checked ~ label {
+  color: #f59e0b;
+}
+
+.star-rating-input input[type="radio"]:focus-visible + label {
+  outline: 2px solid #0d6efd;
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+/* Time Slot Selector Pills/Cards */
+.slot-option-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.slot-option-label {
+  display: block;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.slot-option-label:hover {
+  border-color: #0d6efd;
+  background-color: #f8fbff;
+}
+
+.slot-option-input:checked + .slot-option-label {
+  border-color: #0d6efd;
+  background-color: #e7f1ff;
+  box-shadow: 0 0 0 0.15rem rgba(13, 110, 253, 0.2);
+}
+
+.slot-option-input:focus-visible + .slot-option-label {
+  outline: 2px solid #0d6efd;
+  outline-offset: 2px;
+}
+
+.slot-option-input:disabled + .slot-option-label {
+  background-color: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+/* Booking 4-Step Status Stepper */
+.status-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.status-stepper-item {
+  flex: 1 1 140px;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.status-stepper-item.is-active {
+  background-color: #e7f1ff;
+  border-color: #0d6efd;
+}
+
+.status-stepper-item.is-done {
+  background-color: #d1e7dd;
+  border-color: #a3cfbb;
+}
+
+.status-stepper-item.is-cancelled {
+  background-color: #f8d7da;
+  border-color: #f1aeb5;
+}
+
+/* Sticky Sidebar Helper */
+@media (min-width: 992px) {
+  .sticky-sidebar {
+    position: sticky;
+    top: 1.25rem;
+  }
+}
+
+/* Accessible Focus Ring */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #0d6efd;
+  outline-offset: 2px;
 }

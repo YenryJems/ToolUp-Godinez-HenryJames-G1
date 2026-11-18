@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Booking #{{ booking.id }} | ToolUp{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+  <div>
+    <h1 class="h3 fw-bold mb-1">Booking #{{ booking.id }}</h1>
+    <p class="text-muted mb-0">Created {{ booking.created_at }}</p>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <span class="badge badge-status-{{ booking.status|lower }} fs-6 px-3 py-2">{{ booking.status }}</span>
+    <a href="{% url 'accounts:dashboard' %}" class="btn btn-outline-secondary btn-sm">Back to Dashboard</a>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-4">
+    <h2 class="h6 text-uppercase text-muted fw-bold mb-3">Booking Status Progress</h2>
+    <ul class="status-stepper">
+      <li class="status-stepper-item {% if booking.status == 'PENDING' %}is-active{% elif booking.status == 'ACCEPTED' or booking.status == 'COMPLETED' %}is-done{% endif %}">
+        <div class="small fw-bold">1. PENDING</div>
+        <div class="small text-muted">Awaiting technician confirmation</div>
+      </li>
+      <li class="status-stepper-item {% if booking.status == 'ACCEPTED' %}is-active{% elif booking.status == 'COMPLETED' %}is-done{% endif %}">
+        <div class="small fw-bold">2. ACCEPTED</div>
+        <div class="small text-muted">Slot reserved &amp; scheduled</div>
+      </li>
+      <li class="status-stepper-item {% if booking.status == 'COMPLETED' %}is-done{% endif %}">
+        <div class="small fw-bold">3. COMPLETED</div>
+        <div class="small text-muted">Repair finished; ready for review</div>
+      </li>
+      <li class="status-stepper-item {% if booking.status == 'CANCELLED' %}is-cancelled{% endif %}">
+        <div class="small fw-bold">CANCELLED</div>
+        <div class="small text-muted">Final &mdash; slot released</div>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h2 class="h5 mb-0 fw-bold">Service Visit Details</h2>
+      </div>
+      <div class="card-body p-4">
+        <dl class="row mb-0">
+          <dt class="col-sm-4 text-muted">Trade Category</dt>
+          <dd class="col-sm-8 fw-semibold">{{ booking.category_name }}</dd>
+
+          <dt class="col-sm-4 text-muted">Service Date</dt>
+          <dd class="col-sm-8 fw-semibold">{{ booking.service_date }}</dd>
+
+          <dt class="col-sm-4 text-muted">Time Slot</dt>
+          <dd class="col-sm-8">{{ booking.time_slot_label }}</dd>
+
+          <dt class="col-sm-4 text-muted">Cebu City Address</dt>
+          <dd class="col-sm-8">{{ booking.service_address }}</dd>
+
+          <dt class="col-sm-4 text-muted">Issue Description</dt>
+          <dd class="col-sm-8 mb-0">{{ booking.issue_description }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3">
+        <h2 class="h5 mb-0 fw-bold">Status Actions</h2>
+      </div>
+      <div class="card-body p-4">
+        {% if booking.status == 'PENDING' %}
+          {% if user.is_technician %}
+            <p class="small text-muted mb-3">Accept this request to confirm the slot, or decline to cancel and free the time slot.</p>
+            <div class="d-flex flex-wrap gap-2">
+              <form method="post" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="accept">
+                <button type="submit" class="btn btn-success">Accept Booking</button>
+              </form>
+              <form method="post" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="decline">
+                <button type="submit" class="btn btn-outline-danger">Decline Request</button>
+              </form>
+            </div>
+          {% elif user.is_client %}
+            <p class="small text-muted mb-3">This request is awaiting technician approval. You may cancel while it is pending.</p>
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="cancel">
+              <button type="submit" class="btn btn-outline-danger">Cancel Booking</button>
+            </form>
+          {% else %}
+            <p class="text-muted small mb-0">Admins have read-only visibility over booking status transitions.</p>
+          {% endif %}
+
+        {% elif booking.status == 'ACCEPTED' %}
+          {% if user.is_technician %}
+            <p class="small text-muted mb-3">Mark this job completed once the repair is done, or cancel if unable to proceed.</p>
+            <div class="d-flex flex-wrap gap-2">
+              <form method="post" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="complete">
+                <button type="submit" class="btn btn-primary">Mark Job Completed</button>
+              </form>
+              <form method="post" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="cancel">
+                <button type="submit" class="btn btn-outline-danger">Cancel Booking</button>
+              </form>
+            </div>
+          {% elif user.is_client %}
+            <p class="small text-muted mb-3">Your booking is confirmed. You may cancel before the visit if plans change.</p>
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="cancel">
+              <button type="submit" class="btn btn-outline-danger">Cancel Booking</button>
+            </form>
+          {% else %}
+            <p class="text-muted small mb-0">Admins have read-only visibility over booking status transitions.</p>
+          {% endif %}
+
+        {% elif booking.status == 'COMPLETED' %}
+          <p class="small text-muted mb-3">
+            This booking is <strong>COMPLETED</strong> (final status; no further status transitions allowed).
+          </p>
+          {% if user.is_client and not booking.has_review %}
+            <a href="{% url 'review_create' booking.id %}" class="btn btn-warning fw-semibold">
+              <i class="bi bi-star-fill me-1" aria-hidden="true"></i>Write a Review
+            </a>
+          {% elif booking.has_review %}
+            <div class="alert alert-success small mb-0">
+              A client review has already been submitted for this completed booking.
+            </div>
+          {% endif %}
+
+        {% else %}
+          <div class="alert alert-secondary small mb-0">
+            This booking is <strong>CANCELLED</strong> (final status; no further changes allowed).
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h2 class="h6 text-uppercase text-muted mb-0 fw-bold">Assigned Technician</h2>
+      </div>
+      <div class="card-body p-4">
+        <h3 class="h6 fw-bold mb-1">{{ booking.technician_name }}</h3>
+        <p class="small text-muted mb-2">{{ booking.category_name }} &middot; Brgy. {{ booking.technician_barangay }}</p>
+        <div class="fw-semibold mb-3">&#8369;{{ booking.hourly_rate }}/hr</div>
+        <a href="{% url 'technician_detail' booking.technician_id %}" class="btn btn-outline-primary btn-sm">
+          View Technician Profile
+        </a>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3">
+        <h2 class="h6 text-uppercase text-muted mb-0 fw-bold">Homeowner (Client)</h2>
+      </div>
+      <div class="card-body p-4">
+        <div class="fw-semibold mb-1">{{ booking.client_name }}</div>
+        <div class="small text-muted">{{ booking.client_contact }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

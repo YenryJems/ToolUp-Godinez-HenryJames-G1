@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Book {{ technician.full_name }} | ToolUp{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb small">
+    <li class="breadcrumb-item"><a href="{% url 'directory' %}">Directory</a></li>
+    <li class="breadcrumb-item">
+      <a href="{% url 'technician_detail' technician.id %}">{{ technician.full_name }}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Request Service Visit</li>
+  </ol>
+</nav>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3">
+        <h1 class="h4 mb-0 fw-bold">Schedule a Service Visit</h1>
+        <p class="small text-muted mb-0">
+          Pick an open date and time slot. Already booked slots are blocked automatically to prevent double booking.
+        </p>
+      </div>
+      <div class="card-body p-4">
+        <form method="post">
+          {% csrf_token %}
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label for="booking-date" class="form-label fw-semibold">
+                Service Date <span class="text-danger">*</span>
+              </label>
+              <input
+                type="date"
+                id="booking-date"
+                name="service_date"
+                value="{{ default_date }}"
+                min="{{ min_date }}"
+                class="form-control"
+                required
+              >
+              <div class="form-text">Past dates are not allowed.</div>
+            </div>
+            <div class="col-md-6">
+              <label for="booking-barangay" class="form-label fw-semibold">
+                Cebu City Barangay <span class="text-danger">*</span>
+              </label>
+              <select id="booking-barangay" name="barangay" class="form-select" required>
+                <option value="">Select Cebu City Barangay</option>
+                {% for brgy in barangays %}
+                  <option value="{{ brgy }}" {% if technician.barangay == brgy %}selected{% endif %}>
+                    {{ brgy }}
+                  </option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Service is strictly limited to Cebu City barangays.</div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <div class="form-label fw-semibold mb-2">
+              Available Time Slots <span class="text-danger">*</span>
+            </div>
+            <div class="row g-2">
+              {% for slot in slot_options %}
+                <div class="col-sm-6">
+                  <input
+                    class="slot-option-input"
+                    type="radio"
+                    name="time_slot"
+                    id="slot-{{ forloop.counter }}"
+                    value="{{ slot.code }}"
+                    {% if slot.is_taken %}disabled{% endif %}
+                    {% if slot.is_default %}checked{% endif %}
+                    required
+                  >
+                  <label class="slot-option-label" for="slot-{{ forloop.counter }}">
+                    <div class="d-flex justify-content-between align-items-center">
+                      <span class="fw-semibold">{{ slot.label }}</span>
+                      {% if slot.is_taken %}
+                        <span class="badge bg-secondary">Booked</span>
+                      {% else %}
+                        <span class="badge bg-success-subtle text-success">Available</span>
+                      {% endif %}
+                    </div>
+                  </label>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="booking-address" class="form-label fw-semibold">
+              Street Address &amp; Landmarks (Cebu City) <span class="text-danger">*</span>
+            </label>
+            <textarea
+              id="booking-address"
+              name="service_address"
+              rows="2"
+              class="form-control"
+              placeholder="House/Unit #, Street Name, Subdivision/Landmark, Cebu City"
+              required
+            ></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label for="booking-issue" class="form-label fw-semibold">
+              Household Issue Description <span class="text-danger">*</span>
+            </label>
+            <textarea
+              id="booking-issue"
+              name="issue_description"
+              rows="4"
+              class="form-control"
+              placeholder="Describe the repair problem clearly (e.g., kitchen sink P-trap leak or tripped breaker)."
+              required
+            ></textarea>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2">
+            <button type="submit" class="btn btn-primary btn-lg">Request Service Visit</button>
+            <a href="{% url 'technician_detail' technician.id %}" class="btn btn-outline-secondary btn-lg">
+              Cancel
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm sticky-sidebar">
+      <div class="card-header bg-white py-3">
+        <h2 class="h6 text-uppercase text-muted mb-0 fw-bold">Selected Technician</h2>
+      </div>
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="avatar-circle bg-primary text-white">{{ technician.initials }}</div>
+          <div>
+            <h3 class="h6 fw-bold mb-1">{{ technician.full_name }}</h3>
+            <span class="badge badge-status-verified small">Admin Verified</span>
+          </div>
+        </div>
+        <ul class="list-group list-group-flush small mb-3">
+          <li class="list-group-item px-0 d-flex justify-content-between">
+            <span class="text-muted">Trade</span>
+            <span class="fw-semibold">{{ technician.category_name }}</span>
+          </li>
+          <li class="list-group-item px-0 d-flex justify-content-between">
+            <span class="text-muted">Base Barangay</span>
+            <span class="fw-semibold">Brgy. {{ technician.barangay }}</span>
+          </li>
+          <li class="list-group-item px-0 d-flex justify-content-between">
+            <span class="text-muted">Hourly Rate</span>
+            <span class="fw-bold">&#8369;{{ technician.hourly_rate }}/hr</span>
+          </li>
+          <li class="list-group-item px-0 d-flex justify-content-between">
+            <span class="text-muted">Rating</span>
+            <span class="star-rating fw-semibold">
+              <i class="bi bi-star-fill" aria-hidden="true"></i> {{ technician.avg_rating }} ({{ technician.review_count }})
+            </span>
+          </li>
+        </ul>
+        <div class="alert alert-light border small mb-0">
+          <i class="bi bi-shield-lock me-1 text-primary" aria-hidden="true"></i>
+          Double-booking protection: only one active <code>PENDING</code> or <code>ACCEPTED</code> booking can hold a slot.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
