@@ -7,6 +7,7 @@ Configured for ToolUp using environment variables (.env) with Supabase PostgreSQ
 
 import os
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -101,31 +102,63 @@ WSGI_APPLICATION = "toolup.wsgi.application"
 
 
 # Database
-# Uses PostgreSQL (Supabase) when DB_HOST and DB_NAME are configured; falls back to SQLite for local dev/tests.
-DB_HOST = os.environ.get("DB_HOST", "").strip()
-DB_NAME = os.environ.get("DB_NAME", "").strip()
+# Uses PostgreSQL (Supabase) when DATABASE_URL or DB_HOST+DB_NAME are configured;
+# falls back to local SQLite for offline dev/tests.
+def build_database_config(env: dict[str, str] | os._Environ[str], base_dir: Path) -> dict:
+    """Build Django's default DATABASES['default'] dict from env vars with Supabase support."""
+    database_url = env.get("DATABASE_URL", "").strip()
+    if database_url:
+        parsed = urlparse(database_url)
+        query = parse_qs(parsed.query)
+        port = str(parsed.port or env.get("DB_PORT", "5432"))
+        sslmode = query.get("sslmode", [env.get("DB_SSLMODE", "require")])[0]
+        db_name = unquote(parsed.path.lstrip("/")) or "postgres"
+        db_user = unquote(parsed.username or env.get("DB_USER", "postgres"))
+        db_password = unquote(parsed.password or env.get("DB_PASSWORD", ""))
+        db_host = parsed.hostname or ""
+    else:
+        db_host = env.get("DB_HOST", "").strip()
+        db_name = env.get("DB_NAME", "").strip()
+        db_user = env.get("DB_USER", "postgres").strip()
+        db_password = env.get("DB_PASSWORD", "")
+        port = env.get("DB_PORT", "5432").strip() or "5432"
+        sslmode = env.get("DB_SSLMODE", "require").strip() or "require"
 
-if DB_HOST and DB_NAME:
-    DATABASES = {
-        "default": {
-            "ENGINE": os.environ.get("DB_ENGINE", "django.db.backends.postgresql"),
-            "NAME": DB_NAME,
-            "USER": os.environ.get("DB_USER", "postgres"),
-            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
-            "HOST": DB_HOST,
-            "PORT": os.environ.get("DB_PORT", "5432"),
+    if db_host and db_name:
+        # Supabase PgBouncer transaction pooler (port 6543) requires disabling server-side cursors.
+        raw_disable_cursors = env.get("DB_DISABLE_SERVER_SIDE_CURSORS", "").strip().lower()
+        disable_cursors = (
+            raw_disable_cursors in ("1", "true", "yes", "on")
+            if raw_disable_cursors
+            else port == "6543"
+        )
+        conn_max_age = 0 if port == "6543" else int(env.get("DB_CONN_MAX_AGE", "0") or 0)
+        config: dict = {
+            "ENGINE": env.get("DB_ENGINE", "django.db.backends.postgresql"),
+            "NAME": db_name,
+            "USER": db_user,
+            "PASSWORD": db_password,
+            "HOST": db_host,
+            "PORT": port,
+            "CONN_MAX_AGE": conn_max_age,
+            "DISABLE_SERVER_SIDE_CURSORS": disable_cursors,
             "OPTIONS": {
-                "sslmode": os.environ.get("DB_SSLMODE", "require"),
+                "sslmode": sslmode,
             },
         }
+        if conn_max_age > 0:
+            config["CONN_HEALTH_CHECKS"] = True
+        return config
+
+    return {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": base_dir / "db.sqlite3",
     }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
+
+
+DATABASES = {
+    "default": build_database_config(os.environ, BASE_DIR),
+}
 
 
 # Password validation
@@ -155,6 +188,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+
+# Media uploads (e.g., technician verification documents)
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 
 # Authentication redirects
